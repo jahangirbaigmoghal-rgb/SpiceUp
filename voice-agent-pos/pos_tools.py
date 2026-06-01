@@ -34,10 +34,15 @@ async def _api_request(endpoint: str, method: str = "GET", data: dict | None = N
                     err_msg = response.text
                 return {"success": False, "error": f"API Error ({response.status_code}): {err_msg}"}
                 
-            return response.json()
-        except httpx.RequestError as exc:
+            try:
+                return response.json()
+            except Exception as e:
+                logger.error(f"Failed to parse JSON response from {url}: {e}. Response text: {response.text[:200]}")
+                return {"success": False, "error": f"Invalid JSON response: {e}"}
+        except Exception as exc:
             logger.error(f"HTTP request error during {method} {url}: {exc}")
             return {"success": False, "error": f"Connection error: {exc}"}
+
 
 async def get_full_menu() -> dict:
     """
