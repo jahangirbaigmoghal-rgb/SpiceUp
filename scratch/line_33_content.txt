@@ -1,0 +1,122 @@
+Created At: 2026-05-31T18:58:21Z
+Completed At: 2026-05-31T18:58:21Z
+File Path: `file:///c:/Users/jahan/Outskill/Projects/TakeAwayPOS/apps/admin/src/App.tsx`
+Total Lines: 1996
+Total Bytes: 89985
+Showing lines 1 to 800
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+1: import React, { useEffect, useMemo, useRef, useState } from 'react';
+2: import {
+3:   AlertCircle,
+4:   BookOpen,
+5:   ChevronRight,
+6:   Clock,
+7:   Copy,
+8:   Edit3,
+9:   FolderTree,
+10:   Layers,
+11:   Lock,
+12:   LogOut,
+13:   Menu,
+14:   MoreVertical,
+15:   Plus,
+16:   Save,
+17:   Search,
+18:   SlidersHorizontal,
+19:   Tag,
+20:   Trash2,
+21:   Type,
+22:   X,
+23: } from 'lucide-react';
+24: import { authApi, menuApi, reportsApi } from '@takeaway-pos/api-client';
+25: import { gbp, toPence, toPounds, UK_VAT_RATES } from '@takeaway-pos/utils';
+26: 
+27: // ─── Types ──────────────────────────────────────────────────────────────────
+28: 
+29: type Section =
+30:   | 'dashboard'
+31:   | 'product'
+32:   | 'groups'
+33:   | 'component'
+34:   | 'label'
+35:   | 'manual-product'
+36:   | 'short-hand'
+37:   | 'department'
+38:   | 'product-time';
+39: 
+40: interface Department {
+41:   _id: string;
+42:   name: string;
+43:   isActive: boolean;
+44: }
+45: 
+46: interface Category {
+47:   _id: string;
+48:   name: string;
+49:   displayOrder: number;
+50:   isActive?: boolean;
+51:   parent?: string | Category | null;
+52:   department?: string | Department | null;
+53:   backgroundColor?: string;
+54:   textColor?: string;
+55: }
+56: 
+57: interface ComponentItem {
+58:   _id: string;
+59:   name: string;
+60:   description?: string;
+61:   color?: string;
+62:   textColor?: string;
+63:   defaultPriceDeltaPence: number;
+64:   isActive: boolean;
+65: }
+66: 
+67
+<truncated 29604 bytes>
+{
+756:         group: idOf(a.group as any),
+757:         isEnabled: a.isEnabled,
+758:         requiredOverride: a.requiredOverride,
+759:         posOrder: Number(a.posOrder ?? i),
+760:         websiteOrder: Number(a.websiteOrder ?? i),
+761:         showOnPos: a.showOnPos,
+762:         showOnWebsite: a.showOnWebsite,
+763:       })),
+764:     };
+765:     try {
+766:       const editing = productDrawer as MenuItem | null;
+767:       const res = editing
+768:         ? await menuApi.updateItem(editing._id, payload)
+769:         : await menuApi.createItem(payload);
+770:       const savedId = editing?._id || res.data.item?._id;
+771:       if (savedId && productForm.variationsEnabled) {
+772:         for (const v of productForm.variations) {
+773:           const vp = {
+774:             menuItem: savedId,
+775:             name: v.name,
+776:             priceDeltaPence: Number(v.priceDeltaPence || 0),
+777:             sku: v.sku,
+778:             isDefault: v.isDefault,
+779:             isActive: v.isActive,
+780:             sortOrder: Number(v.sortOrder || 0),
+781:           };
+782:           v._id ? await menuApi.updateVariation(v._id, vp) : await menuApi.createVariation(vp);
+783:         }
+784:       }
+785:       setProductDrawer(false);
+786:       showFeedback('Product saved.');
+787:       await loadAll();
+788:     } catch (error: any) {
+789:       setErrorMsg(error.response?.data?.error || 'Could not save product.');
+790:     }
+791:   };
+792: 
+793:   // ── Group CRUD ────────────────────────────────────────────────────────────
+794: 
+795:   const openGroup = (group?: ModifierGroup) => {
+796:     setGroupDrawer(group || null);
+797:     setGroupForm(
+798:       group
+799:         ? {
+800:             name: group.name,
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

@@ -1,0 +1,16 @@
+# Ignore Python compiled byte code
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore local environment credentials containing API keys
+.env
+
+# Ignore call recordings & WAV files
+recordings/
+*.wav
+
+# System files
+.DS_Store
+Thumbs.db

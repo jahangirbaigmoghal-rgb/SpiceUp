@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>POS Display Refresh Concept</title>
+  <style>
+    :root {
+      --ink: #10231e;
+      --sage: #2f6f5e;
+      --sage-dark: #214e43;
+      --mint: #ddf2e6;
+      --mint-soft: #eef8f2;
+      --cream: #fbfaf4;
+      --white: #ffffff;
+      --line: #d8e7df;
+      --amber: #f6c85f;
+      --coral: #e76f51;
+      --blue: #3b82f6;
+      --shadow: 0 20px 50px rgba(23, 48, 40, 0.12);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: linear-gradient(135deg, #e9f5ee 0%, #f8fbf7 48%, #eef4fb 100%);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .pos-shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: 72px 1fr;
+      gap: 14px;
+      padding: 16px;
+    }
+
+    .topbar,
+    .workspace,
+    .panel,
+    .product-card,
+    .category-pill,
+    .tender-button {
+      border: 1px solid rgba(47, 111, 94, 0.14);
+      box-shadow: var(--shadow);
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 16px;
+      padding: 12px 16px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.84);
+      backdrop-filter: blur(18px);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    .brand-mark {
+      width: 44px;
+      height: 44px;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      color: var(--white);
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--sage), #1b8a6d);
+      box-shadow: 0 12px 28px rgba(47, 111, 94, 0.24);
+    }
+
+    h1, h2, p { margin: 0; }
+
+    h1 {
+      font-size: 20px;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    .subtle {
+      color: #64736d;
+      font-size: 13px;
+      margin-top: 3px;
+    }
+
+    .status-row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .status-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 36px;
+      border-radius: 999px;
+      padding: 0 12px;
+      font-size: 13px;
+      font-weight: 700;
+      background: var(--mint);
+      color: var(--sage-dark);
+    }
+
+    .status-chip.dark {
+      background: var(--ink);
+      color: var(--white);
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 430px;
+      gap: 16px;
+      min-height: 0;
+      border-radius: 24px;
+      padding: 14px;
+      background: rgba(255, 255, 255, 0.64);
+      backdrop-filter: blur(14px);
+    }
+
+    .sell-area {
+      min-width: 0;
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+      gap: 14px;
+    }
+
+    .scan-row {
+      display: grid;
+      grid-template-columns: 1fr 146px;
+      gap: 10px;
+    }
+
+    .scan-box {
+      min-height: 58px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-radius: 16px;
+      padding: 0 16px;
+      background: var(--white);
+      border: 2px solid rgba(47, 111, 94, 0.2);
+      box-shadow: 0 12px 30px rgba(16, 35, 30, 0.07);
+    }
+
+    .scan-box span {
+      color: #789088;
+      font-weight: 650;
+    }
+
+    .scan-button,
+    .pay-button {
+      border: 0;
+      border-radius: 16px;
+      color: var(--white);
+      background: linear-gradient(135deg, var(--sage), #25846a);
+      font-weight: 850;
+      font-size: 16px;
+      box-shadow: 0 16px 34px rgba(47, 111, 94, 0.28);
+    }
+
+    .category-strip {
+      display: flex;
+      gap: 10px;
+      overflow: hidden;
+      padding-bottom: 2px;
+    }
+
+    .category-pill {
+      flex: 0 0 auto;
+      border-radius: 16px;
+      padding: 13px 16px;
+      background: var(--white);
+      font-weight: 800;
+      color: #31534a;
+    }
+
+    .category-pill.active {
+      color: var(--white);
+      background: var(--sage);
+    }
+
+    .product-grid {
+      min-height: 0;
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(132px, 1fr));
+      grid-auto-rows: minmax(154px, 1fr);
+      gap: 12px;
+    }
+
+    .product-card {
+      position: relative;
+      overflow: hidden;
+      border-radius: 18px;
+      padding: 14px;
+      background: var(--white);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .product-card::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 auto 0;
+      height: 5px;
+      background: var(--sage);
+    }
+
+    .product-card.amber::before { background: var(--amber); }
+    .product-card.blue::before { background: var(--blue); }
+    .product-card.coral::before { background: var(--coral); }
+
+    .product-name {
+      font-size: 15px;
+      line-height: 1.22;
+      font-weight: 850;
+      padding-right: 20px;
+    }
+
+    .product-meta {
+      color: #6b7c75;
+      font-size: 12px;
+      margin-top: 7px;
+      line-height: 1.3;
+    }
+
+    .badge {
+      align-self: flex-start;
+      border-radius: 999px;
+      padding: 5px 8px;
+      color: #215243;
+      background: var(--mint);
+      font-size: 11px;
+      font-weight: 850;
+      margin-top: 8px;
+    }
+
+    .price {
+      font-size: 28px;
+      font-weight: 900;
+      letter-spacing: 0;
+      margin-top: 10px;
+    }
+
+    .basket {
+      min-width: 0;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      overflow: hidden;
+      border-radius: 22px;
+      background: var(--ink);
+      color: var(--white);
+      box-shadow: 0 24px 60px rgba(16, 35, 30, 0.28);
+    }
+
+    .basket-header {
+      padding: 18px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.11);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .basket-header h2 {
+      font-size: 20px;
+      letter-spacing: 0;
+    }
+
+    .customer-pill {
+      color: #184237;
+      background: #dff4e8;
+      border-radius: 999px;
+      padding: 7px 10px;
+      font-size: 12px;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+
+    .basket-lines {
+      padding: 12px;
+      overflow: hidden;
+      display: grid;
+      align-content: start;
+      gap: 10px;
+    }
+
+    .basket-line {
+      border-radius: 16px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .line-top,
+    .total-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .line-name {
+      font-weight: 800;
+      line-height: 1.2;
+    }
+
+    .line-controls {
+      display: grid;
+      grid-template-columns: 40px 42px 40px;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .qty-button {
+      height: 36px;
+      border: 0;
+      border-radius: 11px;
+      color: var(--white);
+      background: rgba(255, 255, 255, 0.12);
+      font-weight: 900;
+    }
+
+    .qty-button.value {
+      display: grid;
+      place-items: center;
+      background: var(--white);
+      color: var(--ink);
+    }
+
+    .line-offer {
+      margin-top: 10px;
+      color: #d9ffe7;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .basket-footer {
+      padding: 16px;
+      background: rgba(255, 255, 255, 0.06);
+      border-top: 1px solid rgba(255, 255, 255, 0.11);
+    }
+
+    .total-row {
+      font-size: 14px;
+      color: #c9d5d1;
+      margin-bottom: 7px;
+    }
+
+    .total-row.grand {
+      margin: 14px 0;
+      color: var(--white);
+      font-size: 28px;
+      font-weight: 900;
+    }
+
+    .tender-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin: 12px 0;
+    }
+
+    .tender-button {
+      height: 44px;
+      border-radius: 13px;
+      border-color: rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--white);
+      font-weight: 850;
+    }
+
+    .pay-button {
+      width: 100%;
+      min-height: 62px;
+      font-size: 20px;
+    }
+
+    @media (max-width: 1100px) {
+      .workspace { grid-template-columns: 1fr; }
+      .product-grid { grid-template-columns: repeat(3, minmax(132px, 1fr)); }
+      .basket { min-height: 560px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="pos-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">JG</div>
+        <div>
+          <h1>Jahan Local Grocers</h1>
+          <p class="subtle">Till 1 · Admin User · Shift open 12:42 · GBP</p>
+        </div>
+      </div>
+      <div class="status-row">
+        <span class="status-chip">Online</span>
+        <span class="status-chip">Scanner ready</span>
+        <span class="status-chip dark">Lock till</span>
+      </div>
+    </header>
+
+    <section class="workspace">
+      <section class="sell-area">
+        <div class="scan-row">
+          <div class="scan-box">
+            <strong>Barcode / PLU</strong>
+            <span>Scan, search, or enter SKU</span>
+          </div>
+          <button class="scan-button">Add item</button>
+        </div>
+
+        <nav class="category-strip">
+          <div class="category-pill active">Favourites</div>
+          <div class="category-pill">Bakery</div>
+          <div class="category-pill">Fruit & Veg</div>
+          <div class="category-pill">Drinks</div>
+          <div class="category-pill">Groceries</div>
+          <div class="category-pill">Household</div>
+        </nav>
+
+        <div class="product-grid">
+          <article class="product-card">
+            <div>
+              <div class="product-name">Pure Butter Ghee Tin 1kg</div>
+              <div class="product-meta">&pound;9.00 each · VAT 0%</div>
+              <div class="badge">1 &pound;9 / 2 &pound;16 / 3 &pound;25</div>
+            </div>
+            <div class="price">&pound;9.00</div>
+          </article>
+          <article class="product-card amber">
+            <div>
+              <div class="product-name">Basmati Rice 10kg</div>
+              <div class="product-meta">&pound;1.70 per kg · VAT 0%</div>
+              <div class="badge">Rice + Ghee &pound;22</div>
+            </div>
+            <div class="price">&pound;16.99</div>
+          </article>
+          <article class="product-card blue">
+            <div>
+              <div class="product-name">Cola 2L</div>
+              <div class="product-meta">&pound;0.95 per litre · VAT 20%</div>
+              <div class="badge">Any 2 drinks &pound;3</div>
+            </div>
+            <div class="price">&pound;1.90</div>
+          </article>
+          <article class="product-card coral">
+            <div>
+              <div class="product-name">Reduced Sandwich</div>
+              <div class="product-meta">Bakery · VAT 0%</div>
+              <div class="badge">Meal deal &pound;3.99</div>
+            </div>
+            <div class="price">&pound;1.99</div>
+          </article>
+          <article class="product-card">
+            <div>
+              <div class="product-name">Ready Salted Crisps 6pk</div>
+              <div class="product-meta">Snack · VAT 20%</div>
+              <div class="badge">BOGOF active</div>
+            </div>
+            <div class="price">&pound;1.75</div>
+          </article>
+          <article class="product-card amber">
+            <div>
+              <div class="product-name">Semi Skimmed Milk 2L</div>
+              <div class="product-meta">&pound;0.83 per litre · VAT 0%</div>
+            </div>
+            <div class="price">&pound;1.65</div>
+          </article>
+          <article class="product-card blue">
+            <div>
+              <div class="product-name">Energy Drink 500ml</div>
+              <div class="product-meta">Age restricted · VAT 20%</div>
+              <div class="badge">Challenge 25</div>
+            </div>
+            <div class="price">&pound;1.55</div>
+          </article>
+          <article class="product-card">
+            <div>
+              <div class="product-name">Sourdough Loaf</div>
+              <div class="product-meta">&pound;0.59 per 100g · VAT 0%</div>
+              <div class="badge">20% RTC</div>
+            </div>
+            <div class="price">&pound;2.95</div>
+          </article>
+        </div>
+      </section>
+
+      <aside class="basket">
+        <div class="basket-header">
+          <div>
+            <h2>Current sale</h2>
+            <p class="subtle">4 items · customer display active</p>
+          </div>
+          <span class="customer-pill">LOY10001 · 320 pts</span>
+        </div>
+
+        <div class="basket-lines">
+          <div class="basket-line">
+            <div class="line-top">
+              <div class="line-name">Pure Butter Ghee Tin 1kg</div>
+              <strong>&pound;16.00</strong>
+            </div>
+            <div class="line-controls">
+              <button class="qty-button">-</button>
+              <div class="qty-button value">2</div>
+              <button class="qty-button">+</button>
+            </div>
+            <div class="line-offer">Ghee multi-buy saves &pound;2.00</div>
+          </div>
+
+          <div class="basket-line">
+            <div class="line-top">
+              <div class="line-name">Cola 2L</div>
+              <strong>&pound;3.00</strong>
+            </div>
+            <div class="line-controls">
+              <button class="qty-button">-</button>
+              <div class="qty-button value">2</div>
+              <button class="qty-button">+</button>
+            </div>
+            <div class="line-offer">Any 2 drinks saves &pound;0.80</div>
+          </div>
+
+          <div class="basket-line">
+            <div class="line-top">
+              <div class="line-name">Reduced Sandwich</div>
+              <strong>&pound;1.59</strong>
+            </div>
+            <div class="line-controls">
+              <button class="qty-button">-</button>
+              <div class="qty-button value">1</div>
+              <button class="qty-button">+</button>
+            </div>
+            <div class="line-offer">Bakery RTC saves &pound;0.40</div>
+          </div>
+        </div>
+
+        <footer class="basket-footer">
+          <div class="total-row"><span>Subtotal ex VAT</span><strong>&pound;18.76</strong></div>
+          <div class="total-row"><span>VAT 20%</span><strong>&pound;0.50</strong></div>
+          <div class="total-row"><span>Total savings</span><strong>&pound;3.20</strong></div>
+          <div class="total-row grand"><span>Total</span><span>&pound;20.59</span></div>
+          <div class="tender-grid">
+            <button class="tender-button">&pound;5</button>
+            <button class="tender-button">&pound;10</button>
+            <button class="tender-button">&pound;20</button>
+            <button class="tender-button">Exact</button>
+          </div>
+          <button class="pay-button">Pay &pound;20.59</button>
+        </footer>
+      </aside>
+    </section>
+  </main>
+</body>
+</html>

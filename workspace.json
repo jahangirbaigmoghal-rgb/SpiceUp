@@ -1,0 +1,9 @@
+{
+  "name": "takeaway-pos-pro",
+  "version": "1.0.0",
+  "description": "TakeawayPOS Pro - Enterprise-grade takeaway POS system",
+  "apps": ["apps/pos", "apps/admin", "apps/kds", "apps/customer"],
+  "packages": ["packages/ui", "packages/utils", "packages/api-client"],
+  "server": "server",
+  "voiceAgent": "voice-agent"
+}

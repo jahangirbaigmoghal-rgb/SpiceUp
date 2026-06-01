@@ -1,0 +1,30 @@
+node_modules/
+client/node_modules/
+server/node_modules/
+client/dist/
+server/uploads/
+uploads/
+.env
+server/.env
+client/.env
+.vercel/
+npm-debug.log*
+*.local
+.codex-run/
+
+.vercel
+.env*
+!.env.example
+
+# Turborepo cache
+.turbo/
+
+# Office temp files
+~$*
+
+# Exclude large media and documents from git tracking
+*.mp4
+*.zip
+*.pdf
+*.docx
+
