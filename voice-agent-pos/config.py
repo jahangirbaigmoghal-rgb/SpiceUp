@@ -55,7 +55,7 @@ class Config:
         gemini_voice = os.getenv("GEMINI_VOICE", "Charon")
         twilio_phone_number = os.getenv("TWILIO_PHONE_NUMBER", "+441782288662")
         backend_url = os.getenv("BACKEND_URL", "http://localhost:5001").rstrip("/")
-        restaurant_name = os.getenv("RESTAURANT_NAME", "Rypeyal Express")
+        restaurant_name = os.getenv("RESTAURANT_NAME", "Rupeyal Express")
         restaurant_phone = os.getenv("RESTAURANT_PHONE", "+441782288662")
         
         host = os.getenv("HOST", "0.0.0.0")

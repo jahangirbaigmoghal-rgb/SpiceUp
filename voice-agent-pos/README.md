@@ -1,6 +1,6 @@
-# Rypeyal Express AI Voice Agent
+# Rupeyal Express AI Voice Agent
 
-Dedicated production-grade AI Voice ordering agent for **Rypeyal Express**, powered by the Google Gemini Live API (WebSockets) and Twilio. It is fully integrated with the TakeAwayPOS system APIs to browse menus, check delivery zones, place orders, and email/SMS confirmation links.
+Dedicated production-grade AI Voice ordering agent for **Rupeyal Express**, powered by the Google Gemini Live API (WebSockets) and Twilio. It is fully integrated with the TakeAwayPOS system APIs to browse menus, check delivery zones, place orders, and email/SMS confirmation links.
 
 ## Architecture
 
@@ -123,7 +123,7 @@ The voice agent is equipped with the following 10 real-time tools:
 | `BACKEND_URL` | Base URL of the TakeAwayPOS API | `http://localhost:5001` |
 | `VOICE_AGENT_API_KEY` | Internal auth token shared with POS | `dev_voice_agent_key` |
 | `MONGODB_URI` | Connection URI for customer & call log storage | *(Required)* |
-| `RESTAURANT_NAME` | Display name of the restaurant | `Rypeyal Express` |
+| `RESTAURANT_NAME` | Display name of the restaurant | `Rupeyal Express` |
 | `RESTAURANT_PHONE` | Fallback transfer target phone number | `+441782288662` |
 | `PORT` | Local server port | `5050` |
 | `ENABLE_RECORDING` | Toggles call WAV file saving | `True` |
