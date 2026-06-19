@@ -740,3 +740,14 @@ if (process.argv[1]?.endsWith('seed.js')) {
     process.exit(1);
   }
 }
+
+export async function seedIfEmpty() {
+  const count = await Tenant.countDocuments({});
+  if (count === 0) {
+    console.log('🔄 Empty database detected. Running seed...');
+    await seed();
+  } else {
+    console.log('✅ Database already populated. Skipping seed.');
+  }
+}
+
