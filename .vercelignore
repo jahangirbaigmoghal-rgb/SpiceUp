@@ -1,0 +1,11 @@
+RupeyalExpress.pdf
+node_modules
+.codex-run
+scratch
+uploads
+.env*
+.git
+.turbo
+.vercel
+apps/*/dist
+packages/*/dist

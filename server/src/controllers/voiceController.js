@@ -99,7 +99,6 @@ export async function getVoiceMenu(req, res, next) {
     })
       .populate({ path: 'category', populate: [{ path: 'parent' }, { path: 'department' }] })
       .populate('department')
-      .populate('productTime')
       .populate({ path: 'variations' })
       .populate({ path: 'modifierGroups', populate: [{ path: 'allowedLabelIds' }, { path: 'options.component' }] })
       .populate({ path: 'groupAssignments.group', populate: [{ path: 'allowedLabelIds' }, { path: 'options.component' }] })
@@ -110,7 +109,7 @@ export async function getVoiceMenu(req, res, next) {
       .filter(item => item.category?.channels?.voice !== false)
       .filter(item => item.category?.parent?.isActive !== false)
       .filter(item => item.category?.parent?.channels?.voice !== false)
-      .filter(item => isNowInSchedule(item.availabilitySchedule) && isNowInSchedule(item.productTime) && isNowInSchedule(item.category?.availabilitySchedule))
+      .filter(item => isNowInSchedule(item.availabilitySchedule) && isNowInSchedule(item.category?.availabilitySchedule))
       .map(item => {
         const groups = voiceGroupsForItem(item).map(formatVoiceGroup).filter(group => group.options.length > 0);
         const variations = (item.variations || [])
