@@ -202,3 +202,41 @@ async def transfer_to_human(call_sid: str, transfer_number: str, twilio_client: 
     except Exception as e:
         logger.error(f"Error transferring call {call_sid} to {transfer_number}: {e}")
         return {"success": False, "error": str(e)}
+
+
+def strip_none(d):
+    """
+    Recursively strips None values from dictionaries and lists to prevent Zod validation errors.
+    """
+    if isinstance(d, dict):
+        return {k: strip_none(v) for k, v in d.items() if v is not None}
+    elif isinstance(d, list):
+        return [strip_none(v) for v in d]
+    else:
+        return d
+
+
+async def calculate_order_price(order_type: str, items: list, delivery_postcode: str | None = None) -> dict:
+    """
+    Calculates final pricing breakdown for order items.
+    """
+    payload = {
+        "order_type": order_type,
+        "items": items,
+        "delivery_postcode": delivery_postcode
+    }
+    cleaned = strip_none(payload)
+    res = await _api_request("/api/voice/calculate-price", "POST", cleaned, use_voice_key=True)
+    return res
+
+
+async def send_bill_sms(order_reference: str) -> dict:
+    """
+    Sends a receipt summary bill via SMS Twilio.
+    """
+    payload = {
+        "order_reference": order_reference
+    }
+    res = await _api_request("/api/voice/orders/send-bill-sms", "POST", payload, use_voice_key=True)
+    return res
+

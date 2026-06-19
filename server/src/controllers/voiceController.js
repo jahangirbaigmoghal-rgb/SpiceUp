@@ -1,9 +1,11 @@
 import MenuItem from '../models/MenuItem.js';
-import Category from '../models/Category.js';
+import mongoose from 'mongoose';
+import Variation from '../models/Variation.js';
 import DeliveryZone from '../models/DeliveryZone.js';
 import Order from '../models/Order.js';
 import Customer from '../models/Customer.js';
 import VoiceCallLog from '../models/VoiceCallLog.js';
+import Setting from '../models/Setting.js';
 import { emitNewOrder, emitOrderStatusUpdate } from '../config/socket.js';
 import stripePackage from 'stripe';
 import twilio from 'twilio';
@@ -13,44 +15,156 @@ import { compileKitchenTickets } from './orderController.js';
 const stripe = env.stripeSecretKey ? stripePackage(env.stripeSecretKey) : null;
 const twilioClient = env.twilioAccountSid && env.twilioAuthToken ? twilio(env.twilioAccountSid, env.twilioAuthToken) : null;
 
+function isNowInSchedule(schedule, now = new Date()) {
+  if (!schedule || !schedule.startTime || !schedule.endTime) return true;
+  if (Array.isArray(schedule.days) && schedule.days.length > 0 && !schedule.days.includes(now.getDay())) {
+    return false;
+  }
+  const current = now.getHours() * 60 + now.getMinutes();
+  const [startHour, startMinute] = String(schedule.startTime).split(':').map(Number);
+  const [endHour, endMinute] = String(schedule.endTime).split(':').map(Number);
+  const start = (startHour || 0) * 60 + (startMinute || 0);
+  const end = (endHour || 0) * 60 + (endMinute || 0);
+  return start <= end ? current >= start && current <= end : current >= start || current <= end;
+}
+
+function componentVisibleOnVoice(option) {
+  if (!option?.component || typeof option.component === 'string') return true;
+  return option.component.isActive !== false && option.component.channels?.voice !== false;
+}
+
+function voiceGroupsForItem(item) {
+  const assignments = (item.groupAssignments || [])
+    .filter(assignment => assignment.isEnabled !== false)
+    .filter(assignment => assignment.showOnVoice !== false)
+    .filter(assignment => assignment.group?.isActive !== false)
+    .sort((a, b) => (a.voiceOrder || 0) - (b.voiceOrder || 0))
+    .map(assignment => {
+      const group = assignment.group;
+      const requiredOverride = assignment.requiredOverride;
+      const minSelections = requiredOverride === true && !group.minSelections ? 1 : (group.minSelections || 0);
+      return {
+        ...group,
+        type: requiredOverride === true ? 'required' : requiredOverride === false ? 'optional' : group.type,
+        minSelections,
+      };
+    });
+
+  if (assignments.length > 0) return assignments;
+  return (item.modifierGroups || [])
+    .filter(group => group?.isActive !== false)
+    .filter(group => group?.showOnVoice !== false)
+    .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+}
+
+function formatVoiceGroup(group) {
+  return {
+    groupId: group._id.toString(),
+    name: group.name,
+    displayName: group.displayName || group.name,
+    type: group.type,
+    selectionType: group.selectionType,
+    minSelections: group.minSelections || 0,
+    maxSelections: group.maxSelections || 1,
+    labelsEnabled: group.staticLabelsEnabled !== false,
+    allowedLabels: (group.allowedLabelIds || []).map(label => ({
+      labelId: label._id?.toString?.() || String(label),
+      name: label.name || '',
+      kitchenText: label.kitchenText || label.name || '',
+    })).filter(label => label.name),
+    options: (group.options || [])
+      .filter(option => option.isAvailable !== false)
+      .filter(componentVisibleOnVoice)
+      .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+      .map(option => {
+        const priceDeltaPence = group.samePrice ? (group.samePricePence || 0) : (option.priceDeltaPence || 0);
+        return {
+          optionId: option._id.toString(),
+          name: option.name,
+          kitchenName: option.component?.kitchenName || option.name,
+          priceDeltaPence,
+        };
+      }),
+  };
+}
+
 export async function getVoiceMenu(req, res, next) {
   try {
-    const items = await MenuItem.find({ tenant: req.tenantId, isAvailable: true })
-      .populate('category')
-      .populate('modifierGroups')
+    const items = await MenuItem.find({
+      tenant: req.tenantId,
+      isAvailable: true,
+      holdStatus: { $ne: true },
+      publishStatus: 'published',
+      'channels.voice': { $ne: false },
+    })
+      .populate({ path: 'category', populate: [{ path: 'parent' }, { path: 'department' }] })
+      .populate('department')
+      .populate('productTime')
+      .populate({ path: 'variations' })
+      .populate({ path: 'modifierGroups', populate: [{ path: 'allowedLabelIds' }, { path: 'options.component' }] })
+      .populate({ path: 'groupAssignments.group', populate: [{ path: 'allowedLabelIds' }, { path: 'options.component' }] })
       .lean();
 
-    // Flatten menu items for easy LLM parsing
-    const formattedMenu = items.map(item => ({
-      itemId: item._id.toString(),
-      name: item.name,
-      menuCode: item.menuCode || '',
-      category: item.category?.name || 'General',
-      pricePence: item.basePricePence,
-      description: item.description || '',
-      dietaryTags: item.dietaryTags || [],
-      allergens: item.allergens || [],
-      modifierGroups: (item.modifierGroups || [])
-        .filter(g => g.isActive)
-        .map(g => ({
-          groupId: g._id.toString(),
-          name: g.name,
-          displayName: g.displayName || g.name,
-          type: g.type, // required / optional
-          selectionType: g.selectionType, // single / multiple
-          minSelections: g.minSelections,
-          maxSelections: g.maxSelections,
-          options: g.options
-            .filter(o => o.isAvailable)
-            .map(o => ({
-              optionId: o._id.toString(),
-              name: o.name,
-              priceDeltaPence: o.priceDeltaPence,
-            })),
-        })),
-    }));
+    const formattedMenu = items
+      .filter(item => item.category?.isActive !== false)
+      .filter(item => item.category?.channels?.voice !== false)
+      .filter(item => item.category?.parent?.isActive !== false)
+      .filter(item => item.category?.parent?.channels?.voice !== false)
+      .filter(item => isNowInSchedule(item.availabilitySchedule) && isNowInSchedule(item.productTime) && isNowInSchedule(item.category?.availabilitySchedule))
+      .map(item => {
+        const groups = voiceGroupsForItem(item).map(formatVoiceGroup).filter(group => group.options.length > 0);
+        const variations = (item.variations || [])
+          .filter(variation => variation.isActive !== false)
+          .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || (a.priceDeltaPence || 0) - (b.priceDeltaPence || 0))
+          .map(variation => ({
+            variationId: variation._id.toString(),
+            name: variation.name,
+            sku: variation.sku,
+            priceDeltaPence: variation.priceDeltaPence || 0,
+            isDefault: variation.isDefault === true,
+          }));
 
-    res.json({ menu: formattedMenu });
+        return {
+          itemId: item._id.toString(),
+          name: item.name,
+          shortName: item.shortName || item.menuCode || item.name,
+          kitchenName: item.kitchenName || item.shortName || item.name,
+          menuCode: item.menuCode || '',
+          category: item.category?.name || 'General',
+          parentCategory: item.category?.parent?.name || null,
+          department: item.department?.name || item.category?.department?.name || null,
+          pricePence: item.basePricePence,
+          description: item.description || '',
+          dietaryTags: item.dietaryTags || [],
+          allergens: item.allergens || [],
+          variations,
+          modifierGroups: groups,
+        };
+      });
+
+    const setting = await Setting.findOne({ tenant: req.tenantId }).lean();
+    const voiceAgent = {
+      enabled: setting?.voiceAgentEnabled !== false,
+      voice: setting?.voiceAgentVoice || 'Aoede',
+      model: setting?.voiceAgentModel || 'gemini-3.1-flash-live-preview',
+      language: setting?.voiceAgentLanguage || 'en-GB',
+      greeting: setting?.voiceAgentGreeting || '',
+      prompt: setting?.voiceAgentPrompt || '',
+      handoffPhone: setting?.voiceAgentHandoffPhone || '',
+      maxCallMinutes: setting?.voiceAgentMaxCallMinutes ?? 8,
+      testMode: !!setting?.voiceAgentTestMode,
+      targetLatencyMs: setting?.voiceAgentTargetLatencyMs ?? 900,
+      maxSilenceSeconds: setting?.voiceAgentMaxSilenceSeconds ?? 6,
+      bargeInEnabled: setting?.voiceAgentBargeInEnabled !== false,
+      recordCalls: setting?.voiceAgentRecordCalls !== false,
+      transcriptEnabled: setting?.voiceAgentTranscriptEnabled !== false,
+      paymentLinkEnabled: setting?.voiceAgentPaymentLinkEnabled !== false,
+      allergyHandoff: setting?.voiceAgentAllergyHandoff !== false,
+      complaintHandoff: setting?.voiceAgentComplaintHandoff !== false,
+      menuRefreshSeconds: setting?.voiceAgentMenuRefreshSeconds ?? 60,
+    };
+
+    res.json({ menu: formattedMenu, voiceAgent });
   } catch (err) {
     next(err);
   }
@@ -115,34 +229,74 @@ export async function placeVoiceOrder(req, res, next) {
     const vatBreakdown = { 0: { netPence: 0, vatPence: 0, grossPence: 0 }, 5: { netPence: 0, vatPence: 0, grossPence: 0 }, 20: { netPence: 0, vatPence: 0, grossPence: 0 } };
 
     for (const item of items) {
-      const dbItem = await MenuItem.findOne({ _id: item.menu_item_id, tenant: req.tenantId }).populate('modifierGroups');
+      const dbItem = await MenuItem.findOne({
+        _id: item.menu_item_id,
+        tenant: req.tenantId,
+        isAvailable: true,
+        holdStatus: { $ne: true },
+        publishStatus: 'published',
+        'channels.voice': { $ne: false },
+      })
+        .populate({ path: 'category', populate: [{ path: 'parent' }, { path: 'department' }] })
+        .populate({ path: 'modifierGroups', populate: [{ path: 'allowedLabelIds' }, { path: 'options.component' }] })
+        .populate({ path: 'groupAssignments.group', populate: [{ path: 'allowedLabelIds' }, { path: 'options.component' }] })
+        .lean();
       if (!dbItem) {
         return res.status(400).json({ error: `Menu item not found: ${item.name || item.menu_item_id}` });
+      }
+      if (dbItem.category?.isActive === false || dbItem.category?.channels?.voice === false || dbItem.category?.parent?.channels?.voice === false) {
+        return res.status(400).json({ error: `${dbItem.name} is not currently available for voice ordering` });
       }
 
       let modifierDeltaPence = 0;
       const processedModifiers = [];
+      let variationDeltaPence = 0;
+      let processedVariation = null;
+
+      const requestedVariationId = item.variation_id || item.variationId || item.selected_variation_id;
+      if (requestedVariationId) {
+        const variation = await Variation.findOne({
+          _id: requestedVariationId,
+          tenant: req.tenantId,
+          menuItem: dbItem._id,
+          isActive: true,
+        });
+        if (!variation) {
+          return res.status(400).json({ error: `Variation is not available for ${dbItem.name}` });
+        }
+        variationDeltaPence = variation.priceDeltaPence || 0;
+        processedVariation = {
+          variationId: variation._id,
+          name: variation.name,
+          priceDeltaPence: variation.priceDeltaPence || 0,
+          sku: variation.sku,
+        };
+      }
 
       if (item.modifiers && Array.isArray(item.modifiers)) {
+        const voiceGroups = voiceGroupsForItem(dbItem);
         for (const mod of item.modifiers) {
-          const modGroup = dbItem.modifierGroups.find(g => g._id.toString() === mod.groupId || g.name === mod.groupName);
+          const modGroup = voiceGroups.find(g => g._id.toString() === mod.groupId || g.name === mod.groupName);
           if (!modGroup) continue;
 
           const opt = modGroup.options.find(o => o._id.toString() === mod.optionId || o.name === mod.optionName);
-          if (!opt) continue;
+          if (!opt || opt.isAvailable === false || !componentVisibleOnVoice(opt)) continue;
 
-          modifierDeltaPence += opt.priceDeltaPence;
+          const priceDeltaPence = modGroup.samePrice ? (modGroup.samePricePence || 0) : (opt.priceDeltaPence || 0);
+          modifierDeltaPence += priceDeltaPence;
           processedModifiers.push({
             groupName: modGroup.name,
             groupId: modGroup._id,
             optionName: opt.name,
             optionId: opt._id,
-            priceDeltaPence: opt.priceDeltaPence,
+            labelId: mod.labelId || mod.selectedLabelId,
+            labelName: mod.labelName,
+            priceDeltaPence,
           });
         }
       }
 
-      const lineTotalPence = (dbItem.basePricePence + modifierDeltaPence) * (item.quantity || 1);
+      const lineTotalPence = (dbItem.basePricePence + variationDeltaPence + modifierDeltaPence) * (item.quantity || 1);
       subtotalPence += lineTotalPence;
 
       const vatRate = dbItem.vatRate || 20;
@@ -165,6 +319,7 @@ export async function placeVoiceOrder(req, res, next) {
           vatRate,
         },
         quantity: item.quantity || 1,
+        variation: processedVariation,
         modifiers: processedModifiers,
         lineTotalPence,
       });
@@ -178,7 +333,8 @@ export async function placeVoiceOrder(req, res, next) {
       if (!delivery_postcode) {
         return res.status(400).json({ error: 'Postcode required for delivery' });
       }
-      const postcodeOutward = delivery_postcode.trim().toUpperCase().split(' ')[0];
+      const cleaned = delivery_postcode.replace(/\s+/g, '').toUpperCase();
+      const postcodeOutward = cleaned.length >= 3 ? cleaned.slice(0, -3) : cleaned;
       const zone = await DeliveryZone.findOne({
         tenant: req.tenantId,
         postcodePrefix: postcodeOutward,
@@ -290,8 +446,8 @@ export async function placeVoiceOrder(req, res, next) {
     emitNewOrder(req.tenantId, order);
 
     // Send SMS receipt confirmation to the customer
-    const orderTypeLabel = order_type === 'delivery' ? 'Delivery' : 'Collection';
-    const placementMsg = `Thank you for your order at Papa's Pizza & Grill! Your order ref is ${order.reference}. Total: £${(totalPence / 100).toFixed(2)}. Method: ${orderTypeLabel}.`;
+    const tenantSettings = await Setting.findOne({ tenant: req.tenantId }).lean();
+    const placementMsg = compileTextReceipt(order, tenantSettings);
     
     if (twilioClient && customer_phone) {
       try {
@@ -759,58 +915,367 @@ export async function modifyVoiceOrder(req, res, next) {
   }
 }
 
-export async function searchVoiceMenu(req, res, next) {
+function padLine(left, right, width = 36) {
+  const spaceNeeded = width - left.length - right.length;
+  if (spaceNeeded <= 0) {
+    const maxLeftLen = width - right.length - 3;
+    if (maxLeftLen > 5) {
+      return left.substring(0, maxLeftLen) + '... ' + right;
+    }
+    return left + ' ' + right;
+  }
+  return left + ' '.repeat(spaceNeeded) + right;
+}
+
+export function compileTextReceipt(order, settings = {}) {
+  const border = '------------------------------------';
+  
+  let text = '';
+  text += `🧾 ${settings.storeName?.toUpperCase() || "TAKEAWAYPOS"}\n`;
+  if (settings.storeAddress) text += `${settings.storeAddress}\n`;
+  if (settings.storePhone) text += `Tel: ${settings.storePhone}\n`;
+  text += `${border}\n`;
+  text += `Ref: ${order.reference}\n`;
+  text += `Date: ${new Date(order.createdAt || Date.now()).toLocaleString('en-GB')}\n`;
+  text += `Type: ${order.orderType ? order.orderType.toUpperCase() : 'COLLECTION'} (${order.channel ? order.channel.toUpperCase() : 'VOICE'})\n`;
+  text += `${border}\n`;
+
+  const phone = order.customer?.phone || order.callerNumber || '';
+  const customerName = order.customer?.name || 'Customer';
+  text += `Customer: ${customerName}\n`;
+  if (phone) text += `Phone: ${phone}\n`;
+  if (order.customer?.address && order.customer.address.line1) {
+    text += `Address: ${order.customer.address.line1}\n`;
+    if (order.customer.address.postcode) {
+      text += `Postcode: ${order.customer.address.postcode}\n`;
+    }
+  }
+  text += `${border}\n\n`;
+
+  text += `Items:\n`;
+  if (order.lines && order.lines.length > 0) {
+    for (const line of order.lines) {
+      if (line.isBundle) {
+        const priceVal = `£${((line.lineTotalPence || 0) / 100).toFixed(2)}`;
+        const itemLabel = `${line.quantity}x [DEAL] ${line.bundleSnapshot?.name || 'Bundle'}`;
+        text += `${padLine(itemLabel, priceVal, 36)}\n`;
+        if (line.bundleItems) {
+          for (const bi of line.bundleItems) {
+            text += `  - ${bi.menuItemSnapshot?.name || 'Item'}\n`;
+            if (bi.variation) {
+              text += `    Size: ${bi.variation.name}\n`;
+            }
+            if (bi.modifiers) {
+              for (const m of bi.modifiers) {
+                if (m.isManual && m.printOnReceipt === false) continue;
+                const priceText = m.priceDeltaPence > 0 ? `£${(m.priceDeltaPence / 100).toFixed(2)}` : '';
+                const modLabel = `    + ${m.optionName}`;
+                if (priceText) {
+                  text += `${padLine(modLabel, priceText, 36)}\n`;
+                } else {
+                  text += `${modLabel}\n`;
+                }
+              }
+            }
+          }
+        }
+      } else {
+        const priceVal = `£${((line.lineTotalPence || 0) / 100).toFixed(2)}`;
+        const itemLabel = `${line.quantity}x ${line.menuItemSnapshot?.name || 'Item'}`;
+        text += `${padLine(itemLabel, priceVal, 36)}\n`;
+        if (line.variation) {
+          text += `  Size: ${line.variation.name}\n`;
+        }
+        if (line.modifiers) {
+          for (const m of line.modifiers) {
+            if (m.isManual && m.printOnReceipt === false) continue;
+            const priceText = m.priceDeltaPence > 0 ? `£${(m.priceDeltaPence / 100).toFixed(2)}` : '';
+            const modLabel = `  + ${m.optionName}`;
+            if (priceText) {
+              text += `${padLine(modLabel, priceText, 36)}\n`;
+            } else {
+              text += `${modLabel}\n`;
+            }
+          }
+        }
+      }
+      if (line.itemNote) {
+        text += `  *Note: ${line.itemNote}\n`;
+      }
+    }
+  }
+
+  text += `\n${border}\n`;
+  text += `${padLine("Subtotal", `£${((order.subtotalPence || 0) / 100).toFixed(2)}`, 36)}\n`;
+  if (order.discountPence > 0) {
+    text += `${padLine(`Discount (${order.discountReason || 'Promo'})`, `-£${(order.discountPence / 100).toFixed(2)}`, 36)}\n`;
+  }
+  if (order.deliveryChargePence > 0) {
+    text += `${padLine("Delivery Charge", `£${(order.deliveryChargePence / 100).toFixed(2)}`, 36)}\n`;
+  }
+  text += `${padLine("TOTAL", `£${((order.totalPence || 0) / 100).toFixed(2)}`, 36)}\n`;
+  text += `${border}\n`;
+  
+  const payMethod = order.payments?.[0]?.method || 'unpaid';
+  const payStatus = order.payments?.[0]?.status || 'pending';
+  text += `Payment: ${payMethod.toUpperCase()} (${payStatus.toUpperCase()})\n`;
+  text += `${border}\n`;
+  
+  // Clean receipt footer: remove any line containing VAT/GB123456789 (case-insensitive)
+  let footer = settings.receiptFooter || "Thank you for your custom!";
+  footer = footer.split('\n')
+    .filter(line => {
+      const lower = line.toLowerCase();
+      return !lower.includes('vat') && !lower.includes('gb123456789');
+    })
+    .join('\n');
+  
+  text += `${footer}\n`;
+  text += `Powered by TakeAwayPOS`;
+  
+  return text;
+}
+
+export async function sendVoiceBillSms(req, res, next) {
   try {
-    const query = req.query.q || '';
-    if (!query) {
-      return res.json({ success: true, results: [], count: 0 });
+    const { order_reference } = req.body;
+    const order = await Order.findOne({ reference: order_reference, tenant: req.tenantId });
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+    const tenantSettings = await Setting.findOne({ tenant: req.tenantId }).lean();
+    const smsMessage = compileTextReceipt(order, tenantSettings);
+    
+    let smsSent = false;
+    const phone = order.customer?.phone || order.callerNumber;
+    if (twilioClient && phone) {
+      try {
+        await twilioClient.messages.create({
+          body: smsMessage,
+          to: phone,
+          from: env.twilioPhoneNumber || 'TakeawayPOS',
+        });
+        smsSent = true;
+      } catch (smsErr) {
+        console.error('SMS sending failed:', smsErr);
+      }
+    } else {
+      console.log(`⚠️ SMS Bill (Simulated) to ${phone}: \n${smsMessage}`);
+      smsSent = true;
+    }
+    
+    res.json({ success: true, smsSent });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getDebugCalls(req, res, next) {
+  try {
+    const db = mongoose.connection.db;
+    const collections = await db.listCollections().toArray();
+    
+    let dbList = [];
+    try {
+      const client = mongoose.connection.getClient();
+      const adminDb = client.db().admin();
+      const result = await adminDb.listDatabases();
+      dbList = result.databases.map(d => d.name);
+    } catch (dbErr) {
+      dbList = ["error", dbErr.message];
     }
 
-    const items = await MenuItem.find({
-      tenant: req.tenantId,
-      isAvailable: true,
-      name: { $regex: query, $options: 'i' }
-    })
-    .populate('category')
-    .populate('modifierGroups')
-    .lean();
+    // Fetch last 10 orders
+    const voiceOrders = await db.collection('orders')
+      .find({})
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .toArray();
 
-    const results = items.map(item => ({
-      itemId: item._id.toString(),
-      name: item.name,
-      menuCode: item.menuCode || '',
-      category: item.category?.name || 'General',
-      pricePence: item.basePricePence,
-      description: item.description || '',
-      dietaryTags: item.dietaryTags || [],
-      allergens: item.allergens || [],
-      modifierGroups: (item.modifierGroups || [])
-        .filter(g => g.isActive)
-        .map(g => ({
-          groupId: g._id.toString(),
-          name: g.name,
-          displayName: g.displayName || g.name,
-          type: g.type,
-          selectionType: g.selectionType,
-          minSelections: g.minSelections,
-          maxSelections: g.maxSelections,
-          options: g.options
-            .filter(o => o.isAvailable)
-            .map(o => ({
-              optionId: o._id.toString(),
-              name: o.name,
-              priceDeltaPence: o.priceDeltaPence,
-            })),
-        })),
-    }));
+    // Fetch last 10 voice call logs
+    const voiceCallLogs = await db.collection('voicecalllogs')
+      .find({})
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .toArray();
 
+    // Fetch last 10 call recordings (if any exist)
+    let callRecordings = [];
+    if (collections.some(c => c.name === 'callRecordings')) {
+      callRecordings = await db.collection('callRecordings')
+        .find({})
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .toArray();
+    }
+    
+    // Connect to the other database cluster where the voice agent might be saving recordings
+    let otherDbInfo = null;
+    try {
+      const otherConn = await mongoose.createConnection("mongodb+srv://myappuser:4c9SdOvhZNfj5TSr@cluster0.5upg0oe.mongodb.net/aimate?appName=Cluster0").asPromise();
+      const otherDb = otherConn.db;
+      const otherCollections = await otherDb.listCollections().toArray();
+      const otherCallRecordings = await otherDb.collection('callRecordings')
+        .find()
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .toArray();
+      otherDbInfo = {
+        connected: true,
+        dbName: otherConn.name,
+        collections: otherCollections.map(c => c.name),
+        callRecordings: otherCallRecordings
+      };
+      await otherConn.close();
+    } catch (otherErr) {
+      otherDbInfo = {
+        connected: false,
+        error: otherErr.message
+      };
+    }
+    
     res.json({
       success: true,
-      results,
-      count: results.length
+      dbName: mongoose.connection.name,
+      mongoUriHost: env.mongoUri ? env.mongoUri.split('@').pop() : '',
+      dbList,
+      collections: collections.map(c => c.name),
+      voiceOrders,
+      voiceCallLogs,
+      callRecordings,
+      otherDbInfo
     });
   } catch (err) {
     next(err);
   }
 }
+
+export async function calculateVoicePrice(req, res, next) {
+  try {
+    const {
+      order_type,
+      delivery_postcode,
+      items,
+    } = req.body;
+
+    if (!order_type || !items || !Array.isArray(items)) {
+      return res.status(400).json({ error: 'Order type and items array are required' });
+    }
+
+    let subtotalPence = 0;
+    const processedLines = [];
+
+    for (const item of items) {
+      const dbItem = await MenuItem.findOne({
+        _id: item.menu_item_id,
+        tenant: req.tenantId,
+        isAvailable: true,
+        holdStatus: { $ne: true },
+        publishStatus: 'published',
+        'channels.voice': { $ne: false },
+      })
+        .populate({ path: 'category', populate: [{ path: 'parent' }, { path: 'department' }] })
+        .populate({ path: 'modifierGroups', populate: [{ path: 'allowedLabelIds' }, { path: 'options.component' }] })
+        .populate({ path: 'groupAssignments.group', populate: [{ path: 'allowedLabelIds' }, { path: 'options.component' }] })
+        .lean();
+
+      if (!dbItem) {
+        return res.status(400).json({ error: `Menu item not found: ${item.name || item.menu_item_id}` });
+      }
+
+      let modifierDeltaPence = 0;
+      const processedModifiers = [];
+      let variationDeltaPence = 0;
+      let processedVariation = null;
+
+      const requestedVariationId = item.variation_id || item.variationId || item.selected_variation_id;
+      if (requestedVariationId) {
+        const variation = await Variation.findOne({
+          _id: requestedVariationId,
+          tenant: req.tenantId,
+          menuItem: dbItem._id,
+          isActive: true,
+        });
+        if (!variation) {
+          return res.status(400).json({ error: `Variation is not available for ${dbItem.name}` });
+        }
+        variationDeltaPence = variation.priceDeltaPence || 0;
+        processedVariation = {
+          variationId: variation._id,
+          name: variation.name,
+          priceDeltaPence: variation.priceDeltaPence || 0,
+          sku: variation.sku,
+        };
+      }
+
+      if (item.modifiers && Array.isArray(item.modifiers)) {
+        const voiceGroups = voiceGroupsForItem(dbItem);
+        for (const mod of item.modifiers) {
+          const modGroup = voiceGroups.find(g => g._id.toString() === mod.groupId || g.name === mod.groupName);
+          if (!modGroup) continue;
+
+          const opt = modGroup.options.find(o => o._id.toString() === mod.optionId || o.name === mod.optionName);
+          if (!opt || opt.isAvailable === false || !componentVisibleOnVoice(opt)) continue;
+
+          const priceDeltaPence = modGroup.samePrice ? (modGroup.samePricePence || 0) : (opt.priceDeltaPence || 0);
+          modifierDeltaPence += priceDeltaPence;
+          processedModifiers.push({
+            groupName: modGroup.name,
+            groupId: modGroup._id,
+            optionName: opt.name,
+            optionId: opt._id,
+            labelId: mod.labelId || mod.selectedLabelId,
+            labelName: mod.labelName,
+            priceDeltaPence,
+          });
+        }
+      }
+
+      const lineTotalPence = (dbItem.basePricePence + variationDeltaPence + modifierDeltaPence) * (item.quantity || 1);
+      subtotalPence += lineTotalPence;
+
+      processedLines.push({
+        menu_item_id: dbItem._id.toString(),
+        name: dbItem.name,
+        quantity: item.quantity || 1,
+        basePricePence: dbItem.basePricePence,
+        variation: processedVariation,
+        modifiers: processedModifiers,
+        lineTotalPence,
+      });
+    }
+
+    let deliveryChargePence = 0;
+    if (order_type === 'delivery') {
+      if (!delivery_postcode) {
+        return res.status(400).json({ error: 'Postcode required for delivery' });
+      }
+      const cleaned = delivery_postcode.replace(/\s+/g, '').toUpperCase();
+      const postcodeOutward = cleaned.length >= 3 ? cleaned.slice(0, -3) : cleaned;
+      const zone = await DeliveryZone.findOne({
+        tenant: req.tenantId,
+        postcodePrefix: postcodeOutward,
+        isActive: true,
+      });
+
+      if (!zone) {
+        return res.status(400).json({ error: `Delivery unavailable to postcode prefix: ${postcodeOutward}` });
+      }
+      deliveryChargePence = zone.deliveryChargePence;
+    }
+
+    const totalPence = subtotalPence + deliveryChargePence;
+
+    res.json({
+      success: true,
+      subtotalPence,
+      deliveryChargePence,
+      totalPence,
+      items: processedLines,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 

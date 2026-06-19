@@ -140,8 +140,27 @@ async def lifespan(app: FastAPI):
     try:
         mongo_client = MongoClient(config.mongodb_uri, serverSelectionTimeoutMS=2000)
         mongo_client.admin.command('ping')
-        # Use database specified in connection URI, fallback to takeaway_pos
-        db = mongo_client.get_database()
+        
+        # Try getting default database
+        try:
+            db = mongo_client.get_database()
+            db_name = db.name if db is not None else None
+        except Exception as db_err:
+            logger.warning(f"Could not get default database, trying to list: {db_err}")
+            db_name = None
+            
+        # If db_name is None, "test", or not set, search or default to "rupeyal"
+        if not db_name or db_name == "test":
+            available_dbs = mongo_client.list_database_names()
+            logger.info(f"Available databases in cluster: {available_dbs}")
+            if "rupeyal" in available_dbs:
+                db_name = "rupeyal"
+            elif "takeawaypos" in available_dbs:
+                db_name = "takeawaypos"
+            else:
+                db_name = "rupeyal" # Fallback
+                
+        db = mongo_client[db_name]
         logger.info(f"MongoDB connection established on database: {db.name}")
         app.state.db = db
     except Exception as e:
@@ -215,6 +234,18 @@ async def incoming_call(request: Request):
     settings_res = await pos_tools.get_store_settings()
     settings = settings_res.get("settings", {})
     
+    # Check if voice agent is enabled (connect/disconnect toggle)
+    voice_agent_enabled = settings.get("voiceAgentEnabled", True)
+    if not voice_agent_enabled:
+        logger.info("Incoming call rejected: Voice agent is deactivated in settings.")
+        store_name = settings.get("storeName", config.restaurant_name)
+        twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+        <Response>
+            <Say>Thank you for calling {store_name}. Our AI ordering assistant is currently offline. Please call back later or order online. Goodbye.</Say>
+            <Hangup/>
+        </Response>"""
+        return Response(content=twiml, media_type="text/xml")
+        
     # Check if restaurant is closed
     if check_outside_operating_hours(settings):
         store_name = settings.get("storeName", config.restaurant_name)

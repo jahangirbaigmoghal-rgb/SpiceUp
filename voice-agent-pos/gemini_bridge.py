@@ -220,6 +220,54 @@ class GeminiBridge:
                     )
                 ),
                 types.FunctionDeclaration(
+                    name="calculate_order_price",
+                    description="Calculates the subtotal, delivery charge, and final total price of the items. Always call this to get the exact total before summarizing the order for the customer.",
+                    parameters=types.Schema(
+                        type="OBJECT",
+                        properties={
+                            "order_type": types.Schema(type="STRING", description="Must be 'delivery' or 'collection'"),
+                            "delivery_postcode": types.Schema(type="STRING", description="UK Postcode prefix, e.g. ST6. Required for delivery."),
+                            "items": types.Schema(
+                                type="ARRAY",
+                                description="List of items to calculate price for",
+                                items=types.Schema(
+                                    type="OBJECT",
+                                    properties={
+                                        "menu_item_id": types.Schema(type="STRING"),
+                                        "name": types.Schema(type="STRING"),
+                                        "quantity": types.Schema(type="INTEGER"),
+                                        "modifiers": types.Schema(
+                                            type="ARRAY",
+                                            items=types.Schema(
+                                                type="OBJECT",
+                                                properties={
+                                                    "groupId": types.Schema(type="STRING"),
+                                                    "groupName": types.Schema(type="STRING"),
+                                                    "optionId": types.Schema(type="STRING"),
+                                                    "optionName": types.Schema(type="STRING")
+                                                }
+                                            )
+                                        )
+                                    },
+                                    required=["menu_item_id", "quantity"]
+                                )
+                            )
+                        },
+                        required=["order_type", "items"]
+                    )
+                ),
+                types.FunctionDeclaration(
+                    name="send_bill_sms",
+                    description="Sends a beautiful space-aligned, tabular formatted receipt SMS bill to the customer for a placed order.",
+                    parameters=types.Schema(
+                        type="OBJECT",
+                        properties={
+                            "order_reference": types.Schema(type="STRING", description="Order reference sequence, e.g. ORD-20260601-0001")
+                        },
+                        required=["order_reference"]
+                    )
+                ),
+                types.FunctionDeclaration(
                     name="transfer_to_human",
                     description="Redirects/transfers the phone call to the restaurant staff. Call this if customer asks to speak to staff or if there is an unresolvable issue.",
                     parameters=types.Schema(type="OBJECT", properties={}, required=[])
@@ -491,6 +539,16 @@ class GeminiBridge:
                     order_reference=args.get("order_reference"),
                     amount_pence=args.get("amount_pence"),
                     phone_number=args.get("phone_number")
+                )
+            elif name == "calculate_order_price":
+                res_payload = await pos_tools.calculate_order_price(
+                    order_type=args.get("order_type"),
+                    items=args.get("items"),
+                    delivery_postcode=args.get("delivery_postcode")
+                )
+            elif name == "send_bill_sms":
+                res_payload = await pos_tools.send_bill_sms(
+                    order_reference=args.get("order_reference")
                 )
             elif name == "get_order_status":
                 res_payload = await pos_tools.get_order_status(args.get("order_reference"))

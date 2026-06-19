@@ -1,0 +1,45 @@
+export const UK_ALLERGENS = [
+  { id: 'celery', name: 'Celery', icon: '🥬' },
+  { id: 'gluten', name: 'Cereals containing gluten', icon: '🌾' },
+  { id: 'crustaceans', name: 'Crustaceans', icon: '🦐' },
+  { id: 'eggs', name: 'Eggs', icon: '🥚' },
+  { id: 'fish', name: 'Fish', icon: '🐟' },
+  { id: 'lupin', name: 'Lupin', icon: '🌻' },
+  { id: 'milk', name: 'Milk', icon: '🥛' },
+  { id: 'molluscs', name: 'Molluscs', icon: '🐚' },
+  { id: 'mustard', name: 'Mustard', icon: '🟡' },
+  { id: 'nuts', name: 'Tree nuts', icon: '🥜' },
+  { id: 'peanuts', name: 'Peanuts', icon: '🥜' },
+  { id: 'sesame', name: 'Sesame seeds', icon: '⚪' },
+  { id: 'soya', name: 'Soya', icon: '🫘' },
+  { id: 'sulphites', name: 'Sulphur dioxide / sulphites', icon: '⚗️' },
+];
+
+export const DIETARY_TAGS = [
+  { id: 'halal', name: 'Halal', icon: '☪️', color: '#16a34a' },
+  { id: 'vegetarian', name: 'Vegetarian', icon: '🥬', color: '#22c55e' },
+  { id: 'vegan', name: 'Vegan', icon: '🌱', color: '#15803d' },
+  { id: 'gluten-free', name: 'Gluten Free', icon: '🚫🌾', color: '#eab308' },
+  { id: 'spicy', name: 'Spicy', icon: '🌶️', color: '#ef4444' },
+  { id: 'dairy-free', name: 'Dairy Free', icon: '🚫🥛', color: '#3b82f6' },
+  { id: 'nut-free', name: 'Nut Free', icon: '🚫🥜', color: '#8b5cf6' },
+];
+
+export const MODIFIER_PURPOSES = [
+  { id: 'size', name: 'Size', icon: '📐', description: 'Small, Medium, Large',
+    defaults: { type: 'required', selectionType: 'single', minSelections: 1, maxSelections: 1 } },
+  { id: 'base', name: 'Base / Crust', icon: '🍕', description: 'Thin, Deep Pan, Stuffed Crust',
+    defaults: { type: 'required', selectionType: 'single', minSelections: 1, maxSelections: 1 } },
+  { id: 'topping', name: 'Topping / Extra', icon: '🧀', description: 'Extra cheese, pepperoni, mushrooms',
+    defaults: { type: 'optional', selectionType: 'multiple', minSelections: 0, maxSelections: 10 } },
+  { id: 'sauce', name: 'Sauce', icon: '🫙', description: 'Garlic, BBQ, Chilli, Mayo',
+    defaults: { type: 'optional', selectionType: 'multiple', minSelections: 0, maxSelections: 3 } },
+  { id: 'drink', name: 'Drink', icon: '🥤', description: 'Coke, Fanta, Sprite, Water',
+    defaults: { type: 'optional', selectionType: 'single', minSelections: 0, maxSelections: 1 } },
+  { id: 'side', name: 'Side', icon: '🍟', description: 'Chips, Salad, Rice, Naan',
+    defaults: { type: 'optional', selectionType: 'single', minSelections: 0, maxSelections: 1 } },
+  { id: 'cooking', name: 'Cooking Preference', icon: '🔥', description: 'Well Done, Medium, Rare',
+    defaults: { type: 'optional', selectionType: 'single', minSelections: 0, maxSelections: 1 } },
+  { id: 'other', name: 'Other', icon: '❓', description: 'Custom choice group',
+    defaults: { type: 'optional', selectionType: 'single', minSelections: 0, maxSelections: 1 } },
+];

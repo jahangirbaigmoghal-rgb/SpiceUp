@@ -42,6 +42,25 @@ const settingSchema = new mongoose.Schema({
   pwaBannerSub: { type: String, default: 'Authentic Taste of Tunstall' },
   pwaBannerDescription: { type: String, default: "Indulge in Stoke's finest stonebaked pizzas, balti curries, and authentic flame-grilled kebabs. Freshly prepared to order." },
   pwaBannerImage: { type: String, default: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?q=80&w=1600&auto=format&fit=crop' },
+  // AI Voice Agent settings
+  voiceAgentEnabled: { type: Boolean, default: true },
+  voiceAgentVoice: { type: String, default: 'Aoede' },
+  voiceAgentGreeting: { type: String, default: 'Thanks for calling Rupeyal Express. I can help with collection or delivery orders.' },
+  voiceAgentPrompt: { type: String, default: 'You are an AI order-taker for Rupeyal Express. Greet customers warmly and help them order.' },
+  voiceAgentHandoffPhone: { type: String, default: '01782 811112' },
+  voiceAgentMaxCallMinutes: { type: Number, default: 8 },
+  voiceAgentTestMode: { type: Boolean, default: false },
+  voiceAgentModel: { type: String, default: 'gemini-2.0-flash-live-001' },
+  voiceAgentLanguage: { type: String, default: 'en-GB' },
+  voiceAgentTargetLatencyMs: { type: Number, default: 900 },
+  voiceAgentMaxSilenceSeconds: { type: Number, default: 6 },
+  voiceAgentBargeInEnabled: { type: Boolean, default: true },
+  voiceAgentRecordCalls: { type: Boolean, default: true },
+  voiceAgentTranscriptEnabled: { type: Boolean, default: true },
+  voiceAgentPaymentLinkEnabled: { type: Boolean, default: true },
+  voiceAgentAllergyHandoff: { type: Boolean, default: true },
+  voiceAgentComplaintHandoff: { type: Boolean, default: true },
+  voiceAgentMenuRefreshSeconds: { type: Number, default: 60 },
 }, { timestamps: true });
 
 export default mongoose.model('Setting', settingSchema);

@@ -9,11 +9,11 @@ import {
   Plus,
   X
 } from 'lucide-react';
-import { authApi, menuApi, reportsApi } from '@takeaway-pos/api-client';
+import { authApi, menuApi, reportsApi, settingsApi } from '@takeaway-pos/api-client';
 import { gbp, toPence, toPounds, UK_VAT_RATES } from '@takeaway-pos/utils';
 
-type MenuTab = 'product' | 'groups' | 'component' | 'label' | 'manual-product' | 'short-hand' | 'department' | 'product-time';
-type DrawerMode = null | { type: MenuTab | 'product-item'; item?: any; categoryId?: string };
+type MenuTab = 'product' | 'groups' | 'component' | 'label' | 'manual-product' | 'short-hand' | 'department' | 'product-time' | 'settings';
+type DrawerMode = null | { type: MenuTab | 'product-item' | 'settings'; item?: any; categoryId?: string };
 
 interface Department { _id: string; name: string; isActive: boolean; }
 interface Category { _id: string; name: string; displayOrder: number; isActive?: boolean; parent?: string | Category | null; department?: string | Department | null; backgroundColor?: string; textColor?: string; }
@@ -32,7 +32,8 @@ const navItems: Array<{ key: MenuTab; label: string }> = [
   { key: 'manual-product', label: 'Manual Product' },
   { key: 'short-hand', label: 'Short Hand' },
   { key: 'department', label: 'Department' },
-  { key: 'product-time', label: 'Product Time' }
+  { key: 'product-time', label: 'Product Time' },
+  { key: 'settings', label: 'Settings' }
 ];
 
 const steps: Record<MenuTab, string[]> = {
@@ -84,6 +85,11 @@ const steps: Record<MenuTab, string[]> = {
     "Create breakfast, lunch, dinner or late-night slots.",
     "Set start and end times.",
     "Save changes."
+  ],
+  settings: [
+    "Manage global restaurant settings and preferences.",
+    "Toggle the AI Voice Agent on or off as needed.",
+    "Click Save Settings to apply your changes instantly."
   ]
 };
 
@@ -108,6 +114,7 @@ function titleFor(tab: MenuTab) {
   if (tab === 'manual-product') return 'Manual Product';
   if (tab === 'short-hand') return 'Short Hand';
   if (tab === 'department') return 'Department';
+  if (tab === 'settings') return 'Settings';
   return 'Product Time';
 }
 
@@ -130,6 +137,8 @@ export default function App() {
   const [shortHands, setShortHands] = useState<any[]>([]);
   const [groupForm, setGroupForm] = useState<any>(null);
   const [productForm, setProductForm] = useState<any>(null);
+  const [settings, setSettings] = useState<any>(null);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   useEffect(() => {
     authApi.me().then(() => {
@@ -140,7 +149,7 @@ export default function App() {
 
   async function loadAll() {
     try {
-      const [catRes, depRes, compRes, labelRes, groupRes, productRes, timeRes, manualRes, shortRes] = await Promise.all([
+      const [catRes, depRes, compRes, labelRes, groupRes, productRes, timeRes, manualRes, shortRes, settingsRes] = await Promise.all([
         menuApi.categories(),
         menuApi.departments(),
         menuApi.components(),
@@ -149,7 +158,8 @@ export default function App() {
         menuApi.items(),
         menuApi.productTimes(),
         menuApi.manualProducts(),
-        menuApi.shorthands()
+        menuApi.shorthands(),
+        settingsApi.get().catch(() => ({ data: { settings: null } }))
       ]);
       setCategories(catRes.data.categories || []);
       setDepartments(depRes.data.departments || []);
@@ -160,6 +170,7 @@ export default function App() {
       setProductTimes(timeRes.data.productTimes || []);
       setManualProducts(manualRes.data.manualProducts || []);
       setShortHands(shortRes.data.shorthands || []);
+      setSettings(settingsRes.data.settings);
       reportsApi.dashboard().catch(() => undefined);
     } catch {
       setErrorMsg('Failed to load menu options.');
@@ -457,7 +468,11 @@ export default function App() {
           <h1 className="text-xl font-semibold">{titleFor(activeTab)}</h1>
           <div className="flex items-center gap-6">
             {activeTab === 'product' && <button className="rounded-md bg-slate-950 px-8 py-4 text-lg font-semibold text-white">Manage</button>}
-            <button onClick={() => openCreate()} className="p-2 text-slate-700 hover:text-brand-500"><Plus className="h-9 w-9 stroke-[1.5]" /></button>
+            {activeTab !== 'settings' && (
+              <button onClick={() => openCreate()} className="p-2 text-slate-700 hover:text-brand-500">
+                <Plus className="h-9 w-9 stroke-[1.5]" />
+              </button>
+            )}
           </div>
         </header>
 
@@ -470,6 +485,23 @@ export default function App() {
           <EmptyState label="Product Time" onCreate={() => openCreate()} />
         ) : activeTab === 'short-hand' && rows.length === 0 ? (
           <EmptyState label="Short Hand" onCreate={() => openCreate()} />
+        ) : activeTab === 'settings' ? (
+          <SettingsPanel
+            settings={settings}
+            onUpdate={async (newSettings) => {
+              try {
+                setIsSavingSettings(true);
+                const res = await settingsApi.update(newSettings);
+                setSettings(res.data.settings);
+                notify('Settings updated successfully.');
+              } catch (err: any) {
+                setErrorMsg(err.response?.data?.error || 'Failed to update settings.');
+              } finally {
+                setIsSavingSettings(false);
+              }
+            }}
+            isSaving={isSavingSettings}
+          />
         ) : (
           <div>
             {activeTab === 'product' && (
@@ -722,5 +754,173 @@ function ProductForm({ form, setForm, groups, categories, departments, onSave }:
       </section>
       <button onClick={onSave} className="w-full rounded bg-slate-950 py-3 font-semibold text-white">Save Changes</button>
     </div>
+  );
+}
+
+interface SettingsPanelProps {
+  settings: any;
+  onUpdate: (data: any) => Promise<void>;
+  isSaving: boolean;
+}
+
+function SettingsPanel({ settings, onUpdate, isSaving }: SettingsPanelProps) {
+  const [voiceAgentEnabled, setVoiceAgentEnabled] = useState(false);
+  const [voiceAgentGreeting, setVoiceAgentGreeting] = useState('');
+  const [voiceAgentHandoffPhone, setVoiceAgentHandoffPhone] = useState('');
+  const [voiceAgentRecordCalls, setVoiceAgentRecordCalls] = useState(true);
+  const [voiceAgentTestMode, setVoiceAgentTestMode] = useState(false);
+
+  useEffect(() => {
+    if (settings) {
+      setVoiceAgentEnabled(!!settings.voiceAgentEnabled);
+      setVoiceAgentGreeting(settings.voiceAgentGreeting || '');
+      setVoiceAgentHandoffPhone(settings.voiceAgentHandoffPhone || '');
+      setVoiceAgentRecordCalls(settings.voiceAgentRecordCalls !== false);
+      setVoiceAgentTestMode(!!settings.voiceAgentTestMode);
+    }
+  }, [settings]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onUpdate({
+      voiceAgentEnabled,
+      voiceAgentGreeting,
+      voiceAgentHandoffPhone,
+      voiceAgentRecordCalls,
+      voiceAgentTestMode,
+    });
+  };
+
+  if (!settings) {
+    return (
+      <div className="flex h-[50vh] items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-slate-900"></div>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="max-w-4xl mx-auto p-10 space-y-8">
+      {/* Voice Agent Switch Card */}
+      <div className={`relative overflow-hidden rounded-2xl border transition-all duration-300 ${
+        voiceAgentEnabled 
+          ? 'border-emerald-500 bg-gradient-to-br from-emerald-50/40 via-white to-emerald-50/10 shadow-lg shadow-emerald-50' 
+          : 'border-slate-200 bg-slate-50/50 shadow-sm'
+      }`}>
+        <div className="p-8 flex items-start justify-between gap-6">
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <span className={`flex h-12 w-12 items-center justify-center rounded-xl transition-colors duration-300 ${
+                voiceAgentEnabled ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-500'
+              }`}>
+                {voiceAgentEnabled ? (
+                  <svg className="h-6 w-6 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                  </svg>
+                ) : (
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                  </svg>
+                )}
+              </span>
+              <div>
+                <h3 className="text-xl font-bold text-slate-800">AI Voice Assistant</h3>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className={`h-2.5 w-2.5 rounded-full ${voiceAgentEnabled ? 'bg-emerald-500 animate-ping' : 'bg-slate-400'}`} />
+                  <span className={`text-xs font-bold uppercase tracking-wider ${voiceAgentEnabled ? 'text-emerald-600' : 'text-slate-500'}`}>
+                    {voiceAgentEnabled ? 'Online & Listening' : 'Offline / Disconnected'}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <p className="text-slate-600 text-sm max-w-xl mt-3 leading-relaxed">
+              When activated, our advanced AI agent answers incoming calls, greets your customers, processes delivery or collection orders, calculates pricing, and pushes orders directly to your POS screen.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setVoiceAgentEnabled(!voiceAgentEnabled)}
+            className={`relative inline-flex h-10 w-20 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-300 ease-in-out focus:outline-none ${
+              voiceAgentEnabled ? 'bg-emerald-500' : 'bg-slate-300'
+            }`}
+          >
+            <span className={`pointer-events-none inline-block h-9 w-9 transform rounded-full bg-white shadow-md ring-0 transition duration-300 ease-in-out ${
+              voiceAgentEnabled ? 'translate-x-10' : 'translate-x-0'
+            }`} />
+          </button>
+        </div>
+      </div>
+
+      {/* Detail Fields Card */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm space-y-6">
+        <h4 className="text-lg font-bold text-slate-800 border-b border-slate-100 pb-3">Agent Customization</h4>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-2">
+            <label className="block text-sm font-semibold text-slate-700">Welcome Greeting</label>
+            <textarea
+              value={voiceAgentGreeting}
+              onChange={e => setVoiceAgentGreeting(e.target.value)}
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none min-h-[100px] transition-all duration-200"
+              placeholder="E.g., Thanks for calling Rupeyal Express. I can help with collection or delivery orders."
+            />
+            <p className="text-xs text-slate-400">The first sentence spoken by the AI when a customer calls.</p>
+          </div>
+
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-slate-700">Handoff Phone Number</label>
+              <input
+                value={voiceAgentHandoffPhone}
+                onChange={e => setVoiceAgentHandoffPhone(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all duration-200"
+                placeholder="E.g., 01782 811112"
+              />
+              <p className="text-xs text-slate-400">Call is redirected to this number if the customer asks to speak to staff or needs manual help.</p>
+            </div>
+
+            <div className="flex flex-col gap-4">
+              <label className="flex items-center justify-between cursor-pointer">
+                <div className="space-y-0.5">
+                  <span className="text-sm font-semibold text-slate-700">Record Calls</span>
+                  <p className="text-xs text-slate-400">Save stereo audio recordings for staff review and quality assurance.</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={voiceAgentRecordCalls}
+                  onChange={e => setVoiceAgentRecordCalls(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                />
+              </label>
+
+              <label className="flex items-center justify-between cursor-pointer">
+                <div className="space-y-0.5">
+                  <span className="text-sm font-semibold text-slate-700">Test / Simulation Mode</span>
+                  <p className="text-xs text-slate-400">Simulate order creation without pushing to active kitchen display channels.</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={voiceAgentTestMode}
+                  onChange={e => setVoiceAgentTestMode(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                />
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Action Bar */}
+      <div className="flex justify-end pt-4 border-t border-slate-100">
+        <button
+          type="submit"
+          disabled={isSaving}
+          className={`flex items-center justify-center gap-2 rounded-xl bg-slate-950 hover:bg-slate-900 text-white px-8 py-4 font-bold transition-all duration-200 shadow-md shadow-slate-950/10 disabled:opacity-50`}
+        >
+          {isSaving ? 'Saving Changes...' : 'Save Settings'}
+        </button>
+      </div>
+    </form>
   );
 }
