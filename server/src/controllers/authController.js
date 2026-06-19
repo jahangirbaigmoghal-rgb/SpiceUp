@@ -47,6 +47,7 @@ export async function login(req, res, next) {
         username: user.username,
         email: user.email,
         role: user.role,
+        tenant: user.tenant ? user.tenant.toString() : undefined,
       },
     });
   } catch (err) {
@@ -60,19 +61,23 @@ export async function loginPin(req, res, next) {
     if (!pin) {
       return res.status(400).json({ error: 'PIN is required' });
     }
-
+    console.log(`[loginPin] req.tenantId = ${req.tenantId}, pin = ${pin}, terminalId = ${terminalId}`);
     // Find all active users in this tenant to verify PIN
     const users = await User.find({ tenant: req.tenantId, isActive: true });
+    console.log(`[loginPin] Found ${users.length} active users: ${users.map(u => u.username).join(', ')}`);
     let authenticatedUser = null;
 
     for (const u of users) {
-      if (u.pin && (await u.verifyPin(pin))) {
+      const isMatch = u.pin && (await u.verifyPin(pin));
+      console.log(`[loginPin] Checking user ${u.username} (role: ${u.role}): matches = ${isMatch}`);
+      if (isMatch) {
         authenticatedUser = u;
         break;
       }
     }
 
     if (!authenticatedUser) {
+      console.log(`[loginPin] Authentication failed for PIN: ${pin}`);
       return res.status(401).json({ error: 'Invalid PIN' });
     }
 
@@ -93,6 +98,7 @@ export async function loginPin(req, res, next) {
         username: authenticatedUser.username,
         email: authenticatedUser.email,
         role: authenticatedUser.role,
+        tenant: authenticatedUser.tenant ? authenticatedUser.tenant.toString() : undefined,
       },
     });
   } catch (err) {
@@ -106,7 +112,19 @@ export async function logout(req, res) {
 }
 
 export async function me(req, res) {
-  res.json({ user: req.user });
+  if (req.user) {
+    res.json({
+      user: {
+        id: req.user._id,
+        name: req.user.name,
+        username: req.user.username,
+        role: req.user.role,
+        tenant: req.user.tenant ? req.user.tenant.toString() : undefined,
+      },
+    });
+  } else {
+    res.json({ user: null });
+  }
 }
 
 export async function verifyPin(req, res, next) {
@@ -115,22 +133,27 @@ export async function verifyPin(req, res, next) {
     if (!pin) {
       return res.status(400).json({ error: 'PIN is required' });
     }
+    console.log(`[verifyPin] req.tenantId = ${req.tenantId}, pin = ${pin}`);
 
     const users = await User.find({
       tenant: req.tenantId,
       isActive: true,
       role: { $in: ['manager', 'admin', 'super_admin'] },
     });
+    console.log(`[verifyPin] Found ${users.length} active managers/admins: ${users.map(u => u.username).join(', ')}`);
 
     let verifiedUser = null;
     for (const u of users) {
-      if (u.pin && (await u.verifyPin(pin))) {
+      const isMatch = u.pin && (await u.verifyPin(pin));
+      console.log(`[verifyPin] Checking manager ${u.username}: matches = ${isMatch}`);
+      if (isMatch) {
         verifiedUser = u;
         break;
       }
     }
 
     if (!verifiedUser) {
+      console.log(`[verifyPin] Verification failed for manager PIN: ${pin}`);
       return res.status(403).json({ error: 'Verification failed — invalid manager PIN' });
     }
 

@@ -141,7 +141,10 @@ export default function App() {
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   useEffect(() => {
-    authApi.me().then(() => {
+    authApi.me().then((res: any) => {
+      if (res.data?.user?.tenant) {
+        localStorage.setItem('tenantId', res.data.user.tenant);
+      }
       setIsAuthenticated(true);
       loadAll();
     }).catch(() => undefined);
@@ -180,7 +183,10 @@ export default function App() {
   async function login(event: React.FormEvent) {
     event.preventDefault();
     try {
-      await authApi.login({ username, password });
+      const res = await authApi.login({ username, password });
+      if (res.data?.user?.tenant) {
+        localStorage.setItem('tenantId', res.data.user.tenant);
+      }
       setIsAuthenticated(true);
       await loadAll();
     } catch (error: any) {

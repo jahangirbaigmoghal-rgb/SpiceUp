@@ -1,20 +1,29 @@
+# Dependencies
 node_modules/
-client/node_modules/
-server/node_modules/
-client/dist/
-server/uploads/
-uploads/
-.env
-server/.env
-client/.env
-.vercel/
-npm-debug.log*
-*.local
-.codex-run/
+**/node_modules/
 
-.vercel
+# Production builds
+dist/
+**/dist/
+
+# Local configuration and secret files
 .env*
 !.env.example
+
+# Vercel
+.vercel/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# Project-specific ignores
+.codex-run/
+scratch/
+uploads/
+server/uploads/
 
 # Turborepo cache
 .turbo/
@@ -27,4 +36,5 @@ npm-debug.log*
 *.zip
 *.pdf
 *.docx
+
 

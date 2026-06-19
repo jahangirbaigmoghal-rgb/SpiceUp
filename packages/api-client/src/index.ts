@@ -11,7 +11,7 @@ function createApiClient(): AxiosInstance {
     timeout: 15_000,
   });
 
-  // Request interceptor — attach idempotency key for POST/PUT
+  // Request interceptor — attach idempotency key and tenant ID
   client.interceptors.request.use((config) => {
     if (config.method === 'post' || config.method === 'put') {
       if (!config.headers['X-Idempotency-Key']) {
@@ -19,6 +19,15 @@ function createApiClient(): AxiosInstance {
           `client-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
       }
     }
+    
+    // Attach tenant ID from localStorage if available
+    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+      const tenantId = localStorage.getItem('tenantId');
+      if (tenantId) {
+        config.headers['X-Tenant-ID'] = tenantId;
+      }
+    }
+    
     return config;
   });
 

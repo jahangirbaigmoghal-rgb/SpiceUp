@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { env } from '../config/env.js';
 import Tenant from '../models/Tenant.js';
 
@@ -17,12 +18,23 @@ export async function tenantMiddleware(req, res, next) {
       return next();
     }
 
-    if (cachedTenantId) {
+    // 1. Resolve from header if passed and valid
+    const headerTenantId = req.headers['x-tenant-id'];
+    if (headerTenantId && mongoose.Types.ObjectId.isValid(headerTenantId)) {
+      const tenantExists = await Tenant.exists({ _id: headerTenantId });
+      if (tenantExists) {
+        req.tenantId = headerTenantId;
+        return next();
+      }
+    }
+
+    // 2. Fallback to cache if valid and in production
+    if (cachedTenantId && env.nodeEnv === 'production') {
       req.tenantId = cachedTenantId;
       return next();
     }
 
-    // Look up the first/only tenant
+    // 3. Look up the first/only tenant
     const tenant = await Tenant.findOne().select('_id').lean();
     if (tenant) {
       cachedTenantId = tenant._id.toString();
@@ -41,3 +53,4 @@ export async function tenantMiddleware(req, res, next) {
 export function clearTenantCache() {
   cachedTenantId = null;
 }
+

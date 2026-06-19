@@ -1,7 +1,5 @@
 {
   "version": 2,
-  "buildCommand": "npm run vercel-build",
-  "outputDirectory": "client/dist",
   "rewrites": [
     {
       "source": "/api/(.*)",
@@ -12,8 +10,8 @@
       "destination": "/api"
     },
     {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "source": "/",
+      "destination": "/api/health"
     }
   ],
   "functions": {

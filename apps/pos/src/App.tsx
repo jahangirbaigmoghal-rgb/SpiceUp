@@ -192,6 +192,9 @@ export default function App() {
         const res = await authApi.me();
         if (res.data && res.data.user) {
           setUser(res.data.user);
+          if (res.data.user.tenant) {
+            localStorage.setItem('tenantId', res.data.user.tenant);
+          }
           setIsAuthenticated(true);
           fetchShiftStatus();
           fetchMenuData();
@@ -254,6 +257,9 @@ export default function App() {
     try {
       const res = await authApi.loginPin({ pin, terminalId });
       setUser(res.data.user);
+      if (res.data.user.tenant) {
+        localStorage.setItem('tenantId', res.data.user.tenant);
+      }
       setIsAuthenticated(true);
       setPin('');
       fetchShiftStatus();
