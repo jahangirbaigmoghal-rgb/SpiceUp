@@ -201,12 +201,22 @@ async def health(request: Request):
         except Exception as e:
             logger.error(f"Error querying active tenant profile: {e}")
             
+    menu_res = await pos_tools.get_full_menu()
+    menu_ok = menu_res.get("success", False)
+    menu_err = menu_res.get("error", None)
+    menu_summary = menu_res.get("menu_summary", "")
+    
     return {
         "ok": True,
         "mongoConfigured": mongo_configured,
         "database": database_name,
         "activeProfile": active_profile,
+        "menuOk": menu_ok,
+        "menuError": menu_err,
+        "menuSummarySnippet": menu_summary[:800] if menu_summary else None,
+        "backendUrl": pos_tools.BACKEND_URL
     }
+
 
 @app.post("/incoming-call")
 async def incoming_call(request: Request):
