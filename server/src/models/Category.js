@@ -12,6 +12,13 @@ const availabilityScheduleSchema = new mongoose.Schema({
   endTime:   String, // 'HH:mm' e.g. '14:30'
 }, { _id: false });
 
+const channelSchema = new mongoose.Schema({
+  pos: { type: Boolean, default: true },
+  website: { type: Boolean, default: true },
+  mobile: { type: Boolean, default: true },
+  voice: { type: Boolean, default: true },
+}, { _id: false });
+
 /**
  * Category — top-level menu section (e.g. "Starters", "Burgers", "Desserts").
  * Items belong to exactly one category.
@@ -24,6 +31,7 @@ const categorySchema = new mongoose.Schema({
   imageUrl: String,
   displayOrder: { type: Number, default: 0 },
   isActive: { type: Boolean, default: true },
+  channels: { type: channelSchema, default: () => ({}) },
   availabilitySchedule: availabilityScheduleSchema, // null = always available
   color: String, // Optional accent colour for POS UI display
   backgroundColor: { type: String, default: '#f59e0b' },

@@ -132,7 +132,8 @@ async def place_order(
         "notes": notes,
         "call_sid": call_sid
     }
-    res = await _api_request("/api/voice/orders", "POST", payload, use_voice_key=True)
+    cleaned = strip_none(payload)
+    res = await _api_request("/api/voice/orders", "POST", cleaned, use_voice_key=True)
     return res
 
 async def send_payment_link(order_reference: str, amount_pence: int, phone_number: str) -> dict:
@@ -162,7 +163,8 @@ async def modify_order(order_reference: str, items: list, notes: str | None = No
         "items": items,
         "notes": notes
     }
-    res = await _api_request(f"/api/voice/orders/{order_reference}/modify", "POST", payload, use_voice_key=True)
+    cleaned = strip_none(payload)
+    res = await _api_request(f"/api/voice/orders/{order_reference}/modify", "POST", cleaned, use_voice_key=True)
     return res
 
 async def cancel_order(order_reference: str, reason: str | None = None) -> dict:

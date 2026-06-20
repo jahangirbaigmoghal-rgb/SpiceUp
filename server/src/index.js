@@ -9,16 +9,10 @@ async function bootstrap() {
   try {
     // Connect to databases
     await connectDb();
-    if (env.useMemoryDb) {
-      console.log('🔄 Checking if in-memory DB needs seeding...');
-      const Tenant = (await import('./models/Tenant.js')).default;
-      const count = await Tenant.countDocuments();
-      if (count === 0) {
-        console.log('🌱 Empty database detected in dev memory mode. Seeding Papa\'s Pizza...');
-        const { seed } = await import('./seed.js');
-        await seed();
-      }
-    }
+    const { seedIfEmpty, repairDefaultUserPins, ensureAdminExists } = await import('./seed.js');
+    await seedIfEmpty();
+    await repairDefaultUserPins();  // Fix any corrupted PINs from the old double-hash bug
+    await ensureAdminExists();
     await connectRedis();
 
     // Create HTTP server + attach Socket.io

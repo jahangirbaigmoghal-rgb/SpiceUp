@@ -23,3 +23,25 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     </QueryClientProvider>
   </React.StrictMode>
 );
+
+// Service worker auto-update check on window focus
+if ('serviceWorker' in navigator) {
+  const checkServiceWorkerUpdate = () => {
+    navigator.serviceWorker.getRegistrations().then((registrations) => {
+      for (const registration of registrations) {
+        registration.update().catch(err => console.error('SW update check failed:', err));
+      }
+    });
+  };
+
+  window.addEventListener('focus', checkServiceWorkerUpdate);
+
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!refreshing) {
+      refreshing = true;
+      window.location.reload();
+    }
+  });
+}
+

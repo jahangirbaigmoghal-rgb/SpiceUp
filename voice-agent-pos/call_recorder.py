@@ -34,12 +34,15 @@ class CallRecorder:
         self.user_wav.setsampwidth(2)
         self.user_wav.setframerate(16000)
         
-        # Open agent WAV (24kHz PCM mono 16-bit)
+        # Open agent WAV (16kHz PCM mono 16-bit, resampled from 24kHz output of Gemini)
         self.agent_wav = wave.open(self.agent_path, "wb")
         self.agent_wav.setnchannels(1)
         self.agent_wav.setsampwidth(2)
-        self.agent_wav.setframerate(24000)
+        self.agent_wav.setframerate(16000)
         
+        self.agent_ratecv_state = None
+        self.total_user_samples = 0
+        self.total_agent_samples = 0
         self.timeline = []
         self.closed = False
 
@@ -47,13 +50,27 @@ class CallRecorder:
         if not self.closed:
             try:
                 self.user_wav.writeframes(pcm_bytes)
+                self.total_user_samples += len(pcm_bytes) // 2
             except Exception as e:
                 logger.error(f"Error writing user audio for call {self.call_sid}: {e}")
 
     def write_agent_audio(self, pcm_bytes: bytes):
         if not self.closed:
             try:
-                self.agent_wav.writeframes(pcm_bytes)
+                # Resample agent audio in real-time from Gemini's 24kHz to 16kHz
+                resampled, self.agent_ratecv_state = audioop.ratecv(
+                    pcm_bytes, 2, 1, 24000, 16000, self.agent_ratecv_state
+                )
+                
+                # Check silence difference and pad silence to maintain temporal alignment
+                silence_samples = self.total_user_samples - self.total_agent_samples
+                if silence_samples > 0:
+                    silence_bytes = b"\x00\x00" * silence_samples
+                    self.agent_wav.writeframes(silence_bytes)
+                    self.total_agent_samples += silence_samples
+                
+                self.agent_wav.writeframes(resampled)
+                self.total_agent_samples += len(resampled) // 2
             except Exception as e:
                 logger.error(f"Error writing agent audio for call {self.call_sid}: {e}")
 
@@ -67,6 +84,13 @@ class CallRecorder:
     def close_files(self):
         if not self.closed:
             try:
+                # Add final silence padding on close to sync both channels
+                silence_samples = self.total_user_samples - self.total_agent_samples
+                if silence_samples > 0:
+                    silence_bytes = b"\x00\x00" * silence_samples
+                    self.agent_wav.writeframes(silence_bytes)
+                    self.total_agent_samples += silence_samples
+
                 self.user_wav.close()
                 self.agent_wav.close()
             except Exception as e:
@@ -274,6 +298,43 @@ class CallRecorder:
                     upsert=True
                 )
                 logger.info(f"Successfully saved voiceCallLog to MongoDB for call {self.call_sid}")
+
+                # Save copy to callRecordings with both naming conventions
+                sentiment = post_call_analysis.get("sentiment", "Neutral")
+                issue_summary = post_call_analysis.get("summary", "No summary captured")
+                recording_doc = {
+                    "tenant": tenant_id,
+                    "callSid": self.call_sid,
+                    "call_sid": self.call_sid,
+                    "streamSid": stream_sid,
+                    "callerNumber": caller_number,
+                    "customerName": cust_name,
+                    "issueSummary": issue_summary,
+                    "summary": issue_summary,
+                    "sentiment": sentiment,
+                    "status": status,
+                    "startedAt": self.started_at,
+                    "endedAt": ended_at,
+                    "durationSeconds": duration_seconds,
+                    "userTranscript": user_transcript.strip(),
+                    "agentTranscript": agent_transcript.strip(),
+                    "userAudioFileId": user_file_id,
+                    "userFileId": user_file_id,
+                    "agentAudioFileId": agent_file_id,
+                    "agentFileId": agent_file_id,
+                    "stereoAudioFileId": stereo_file_id,
+                    "stereoFileId": stereo_file_id,
+                    "transcript": transcript_timeline,
+                    "createdAt": ended_at,
+                    "orderId": order_id,
+                    "orderReference": order_ref,
+                }
+                self.db.callRecordings.update_one(
+                    {"callSid": self.call_sid, "tenant": tenant_id},
+                    {"$set": recording_doc},
+                    upsert=True
+                )
+                logger.info(f"Successfully saved callRecordings to MongoDB for call {self.call_sid}")
             except Exception as e:
                 logger.error(f"Error inserting voiceCallLog into MongoDB: {e}")
 

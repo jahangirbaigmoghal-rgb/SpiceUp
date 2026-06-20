@@ -5,6 +5,16 @@ const productTimeSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   startTime: { type: String, required: true }, // 'HH:mm' format
   endTime: { type: String, required: true }, // 'HH:mm' format
+  days: [{ type: Number, min: 0, max: 6 }],
+  appliesToProducts: [{ type: mongoose.Schema.Types.ObjectId, ref: 'MenuItem' }],
+  appliesToCategories: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Category' }],
+  appliesToBundles: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Bundle' }],
+  channels: {
+    pos: { type: Boolean, default: true },
+    website: { type: Boolean, default: true },
+    mobile: { type: Boolean, default: true },
+    voice: { type: Boolean, default: true },
+  },
   isActive: { type: Boolean, default: true },
 }, { timestamps: true });
 

@@ -23,7 +23,7 @@ export const env = {
   // Auth
   jwtSecret: process.env.JWT_SECRET ?? 'dev_secret_change_in_production',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '8h',
-  cookieSecret: process.env.COOKIE_SECRET ?? 'dev_cookie_secret',
+  cookieSecret: process.env.COOKIE_SECRET || 'dev_cookie_secret',
 
   // Redis (Upstash)
   redisUrl: process.env.REDIS_URL ?? '',

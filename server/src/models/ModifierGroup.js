@@ -34,6 +34,10 @@ const modifierGroupSchema = new mongoose.Schema({
   allowedLabelIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Label' }],
   samePrice: { type: Boolean, default: false }, // Use same price for all choices
   samePricePence: { type: Number, default: 0 }, // The same price to charge
+  sortOrder: { type: Number, default: 0 },
+  showOnPos: { type: Boolean, default: true },
+  showOnWebsite: { type: Boolean, default: true },
+  showOnVoice: { type: Boolean, default: true },
   type: {
     type: String,
     enum: ['required', 'optional'],

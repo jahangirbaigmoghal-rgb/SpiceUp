@@ -195,15 +195,24 @@ app.add_middleware(
 
 @app.get("/health")
 async def health(request: Request):
-    config = request.app.state.config
     database = request.app.state.db
+    mongo_configured = database is not None
+    database_name = database.name if mongo_configured else None
+    
+    active_profile = None
+    if mongo_configured:
+        try:
+            tenant = database.tenants.find_one({"isActive": True})
+            if tenant:
+                active_profile = tenant.get("name")
+        except Exception as e:
+            logger.error(f"Error querying active tenant profile: {e}")
+            
     return {
-        "status": "healthy",
-        "geminiConfigured": bool(config.gemini_api_key),
-        "mongoConnected": database is not None,
-        "databaseName": database.name if database is not None else None,
-        "restaurantName": config.restaurant_name,
-        "activeCalls": len(active_sessions)
+        "ok": True,
+        "mongoConfigured": mongo_configured,
+        "database": database_name,
+        "activeProfile": active_profile,
     }
 
 @app.post("/incoming-call")
@@ -246,16 +255,16 @@ async def incoming_call(request: Request):
         </Response>"""
         return Response(content=twiml, media_type="text/xml")
         
-    # Check if restaurant is closed
-    if check_outside_operating_hours(settings):
-        store_name = settings.get("storeName", config.restaurant_name)
-        open_time = settings.get("storeOpenTime", "16:00")
-        twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
-        <Response>
-            <Say>Thank you for calling {store_name}. We are currently closed. Our opening hours are daily from {open_time} onwards. Goodbye.</Say>
-            <Hangup/>
-        </Response>"""
-        return Response(content=twiml, media_type="text/xml")
+    # Check if restaurant is closed (commented out to allow pre-orders via media_stream websocket prompt injection)
+    # if check_outside_operating_hours(settings):
+    #     store_name = settings.get("storeName", config.restaurant_name)
+    #     open_time = settings.get("storeOpenTime", "16:00")
+    #     twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+    #     <Response>
+    #         <Say>Thank you for calling {store_name}. We are currently closed. Our opening hours are daily from {open_time} onwards. Goodbye.</Say>
+    #         <Hangup/>
+    #     </Response>"""
+    #     return Response(content=twiml, media_type="text/xml")
 
     # Generate WebSocket url pointing to /media-stream
     host = request.headers.get("host")
@@ -322,6 +331,9 @@ async def media_stream(websocket: WebSocket):
                 # Get caller history
                 caller_history = await get_caller_history_context(database, caller_number)
                 
+                # Check if restaurant is closed to handle pre-orders
+                is_closed = check_outside_operating_hours(settings)
+                
                 # Build system prompt dynamically
                 system_prompt = build_system_prompt(
                     restaurant_name=store_name,
@@ -332,6 +344,16 @@ async def media_stream(websocket: WebSocket):
                     collection_time_mins=collection_time,
                     caller_history_context=caller_history
                 )
+                
+                if is_closed:
+                    open_time = settings.get("storeOpenTime", "16:00")
+                    closed_instructions = (
+                        f"\n\nCRITICAL SYSTEM NOTE: The restaurant is currently CLOSED. "
+                        f"However, you MUST still take pre-orders for the next opening time ({open_time}). "
+                        f"Inform the customer politely that the restaurant is closed right now but they can pre-order. "
+                        f"If they place an order, you MUST append 'PRE-ORDER: {open_time}' to the notes field of the order."
+                    )
+                    system_prompt += closed_instructions
                 
                 # Create and start Gemini audio bridge
                 bridge = GeminiBridge(

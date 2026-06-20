@@ -8,6 +8,10 @@ const bundleItemSchema = new mongoose.Schema({
     basePricePence: { type: Number, required: true },
     vatRate: { type: Number, enum: [0, 5, 20], required: true },
     kitchenStationId: String,
+    departmentId: String,
+    departmentName: String,
+    ticketHeading: String,
+    printerName: String,
   },
   variation: {
     variationId: mongoose.Schema.Types.ObjectId,
@@ -20,12 +24,21 @@ const bundleItemSchema = new mongoose.Schema({
     groupId: mongoose.Schema.Types.ObjectId,
     optionName: String,
     optionId: mongoose.Schema.Types.ObjectId,
+    labelId: mongoose.Schema.Types.ObjectId,
+    labelName: String,
+    kitchenText: String,
     priceDeltaPence: { type: Number, default: 0 },
+    isManual: { type: Boolean, default: false },
+    printOnReceipt: { type: Boolean, default: true },
+  }],
+  manualAddOns: [{
+    name: { type: String, trim: true },
+    priceDeltaPence: { type: Number, default: 0 },
+    kitchenText: String,
   }],
   itemNote: String,
   slotLabel: String, // e.g. "Burger Selection", "Side Selection"
 }, { _id: false });
-
 const orderLineSchema = new mongoose.Schema({
   menuItem: { type: mongoose.Schema.Types.ObjectId, ref: 'MenuItem', required: false },
   menuItemSnapshot: {
@@ -34,6 +47,10 @@ const orderLineSchema = new mongoose.Schema({
     basePricePence: { type: Number },
     vatRate: { type: Number, enum: [0, 5, 20] },
     kitchenStationId: String,
+    departmentId: String,
+    departmentName: String,
+    ticketHeading: String,
+    printerName: String,
   },
   variation: {
     variationId: mongoose.Schema.Types.ObjectId,
@@ -47,7 +64,17 @@ const orderLineSchema = new mongoose.Schema({
     groupId: mongoose.Schema.Types.ObjectId,
     optionName: String,
     optionId: mongoose.Schema.Types.ObjectId,
+    labelId: mongoose.Schema.Types.ObjectId,
+    labelName: String,
+    kitchenText: String,
     priceDeltaPence: { type: Number, default: 0 },
+    isManual: { type: Boolean, default: false },
+    printOnReceipt: { type: Boolean, default: true },
+  }],
+  manualAddOns: [{
+    name: { type: String, trim: true },
+    priceDeltaPence: { type: Number, default: 0 },
+    kitchenText: String,
   }],
   itemNote: String,
   lineTotalPence: { type: Number, required: true }, // (base + sum(modifiers)) * qty for single, or bundle price for bundle
@@ -100,7 +127,7 @@ const orderSchema = new mongoose.Schema({
   },
   customer: {
     name: { type: String, required: true },
-    phone: { type: String, required: true },
+    phone: { type: String, required: false },
     email: String,
     customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer' },
     address: {

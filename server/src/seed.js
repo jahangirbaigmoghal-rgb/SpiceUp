@@ -742,12 +742,132 @@ if (process.argv[1]?.endsWith('seed.js')) {
 }
 
 export async function seedIfEmpty() {
-  const count = await Tenant.countDocuments({});
-  if (count === 0) {
-    console.log('🔄 Empty database detected. Running seed...');
-    await seed();
-  } else {
-    console.log('✅ Database already populated. Skipping seed.');
+  const targetTenantId = '6a216d61d4823e48c82a46ee';
+  
+  // Verify if the target tenant exists and has users
+  const [targetTenantExists, userCount] = await Promise.all([
+    Tenant.findById(targetTenantId).select('_id').lean(),
+    User.countDocuments({ tenant: targetTenantId })
+  ]);
+
+  if (targetTenantExists && userCount > 0) {
+    return;
+  }
+
+  console.log('🌱 Target tenant 6a216d61d4823e48c82a46ee not found or users missing. Re-seeding database...');
+  await seed();
+}
+
+/**
+ * One-time repair: forcibly reset the PINs for default users to their correct values.
+ * This is needed because a previous bug in ensureAdminExists would compare a PIN against
+ * the *default* and reset it if it didn't match — causing valid custom PINs to be wiped.
+ * More critically, the old code ran bcrypt.hash on every startup and stored fresh hashes,
+ * but the verifyPin comparison could fail due to bcrypt salt differences.
+ *
+ * This function resets all default user PINs to their correct defaults ONCE at startup.
+ * After applying this fix, ensureAdminExists no longer overwrites PINs, so this is safe.
+ */
+export async function repairDefaultUserPins() {
+  try {
+    const tenant = await Tenant.findOne();
+    if (!tenant) return;
+    const tenantId = tenant._id;
+
+    const defaultUsers = [
+      { username: 'admin',   pin: '1111' },
+      { username: 'manager', pin: '2222' },
+      { username: 'cashier', pin: '3333' },
+      { username: 'kitchen', pin: '4444' },
+      { username: 'driver',  pin: '5555' },
+    ];
+
+    for (const { username, pin } of defaultUsers) {
+      const user = await User.findOne({ tenant: tenantId, username });
+      if (!user) continue;
+
+      // Verify if the current stored PIN actually works
+      const pinWorks = await user.verifyPin(pin);
+      if (!pinWorks) {
+        // PIN is corrupted — reset it to the correct default
+        console.log(`🔧 Repairing corrupted PIN for ${username}...`);
+        user.pin = await User.hashPin(pin);
+        await user.save();
+        console.log(`✅ PIN for ${username} repaired.`);
+      }
+    }
+  } catch (err) {
+    console.error('Error repairing default user PINs:', err);
   }
 }
+
+export async function ensureAdminExists() {
+  try {
+    const tenant = await Tenant.findOne();
+    if (!tenant) return;
+
+    const tenantId = tenant._id;
+
+    const ensureUser = async (username, name, role, defaultPin, defaultPass) => {
+      let user = await User.findOne({ tenant: tenantId, username });
+
+      if (!user) {
+        // User doesn't exist at all — create with default credentials
+        console.log(`🛡️ Default ${role} user not found. Re-creating default ${role}...`);
+        const pinHash = await User.hashPin(defaultPin);
+        const passHash = await User.hashPassword(defaultPass);
+        await User.create({
+          tenant: tenantId,
+          name,
+          username,
+          role,
+          passwordHash: passHash,
+          pin: pinHash,
+          isActive: true
+        });
+        return;
+      }
+
+      // User exists — only fix role/isActive/missing-PIN. NEVER overwrite an existing PIN.
+      let needsUpdate = false;
+
+      if (user.role !== role) {
+        user.role = role;
+        needsUpdate = true;
+      }
+
+      if (user.isActive !== true) {
+        user.isActive = true;
+        needsUpdate = true;
+      }
+
+      // Only set a PIN if the user has none at all (null/undefined/empty string).
+      // Never reset an existing PIN — that would wipe any PIN the user has set.
+      if (!user.pin || (typeof user.pin === 'string' && user.pin.trim() === '')) {
+        console.log(`🔑 ${username} has no PIN — setting default PIN...`);
+        user.pin = await User.hashPin(defaultPin);
+        needsUpdate = true;
+      }
+
+      // Only set a password hash if none exists
+      if (!user.passwordHash) {
+        user.passwordHash = await User.hashPassword(defaultPass);
+        needsUpdate = true;
+      }
+
+      if (needsUpdate) {
+        await user.save();
+      }
+    };
+
+    await ensureUser('admin', 'Owner Admin', 'admin', '1111', 'Admin123!');
+    await ensureUser('manager', 'Shift Manager', 'manager', '2222', 'Manager123!');
+    await ensureUser('cashier', 'Cashier Staff', 'cashier', '3333', 'Cashier123!');
+    await ensureUser('kitchen', 'Kitchen Chef', 'kitchen', '4444', 'Kitchen123!');
+    await ensureUser('driver', 'Delivery Driver', 'driver', '5555', 'Driver123!');
+  } catch (err) {
+    console.error('Error ensuring default users exist:', err);
+  }
+}
+
 

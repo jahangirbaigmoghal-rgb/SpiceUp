@@ -7,6 +7,7 @@ import {
   getVoiceAgentMetrics,
   getAuditLogReport,
   getVoiceCallLogs,
+  getVoiceCallRecording,
 } from '../controllers/reportController.js';
 import { authenticate, requireManager, requireAdmin } from '../middleware/auth.js';
 
@@ -18,4 +19,5 @@ reportRoutes.get('/zreport', authenticate, requireManager, getZReport);
 reportRoutes.get('/vat', authenticate, requireManager, getVatReport);
 reportRoutes.get('/voice-agent', authenticate, requireManager, getVoiceAgentMetrics);
 reportRoutes.get('/voice-calls', authenticate, requireManager, getVoiceCallLogs);
+reportRoutes.get('/voice-calls/:id/recording', authenticate, requireManager, getVoiceCallRecording);
 reportRoutes.get('/audit', authenticate, requireAdmin, getAuditLogReport);

@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import Order from '../models/Order.js';
 import Shift from '../models/Shift.js';
 import VoiceCallLog from '../models/VoiceCallLog.js';
@@ -216,12 +217,120 @@ export async function getVoiceCallLogs(req, res, next) {
     const { limit } = req.query;
     const limitNum = limit ? parseInt(limit, 10) : 50;
 
+    // Fetch logs, populate orderId, lean
     const logs = await VoiceCallLog.find({ tenant: req.tenantId })
       .sort({ createdAt: -1 })
       .limit(limitNum)
-      .populate('orderId', 'reference status totalPence');
+      .populate('orderId', 'reference status totalPence')
+      .lean();
 
-    res.json({ logs });
+    // Fetch matching call recordings to merge transcripts/audio details
+    const callSids = logs.map(l => l.callSid).filter(Boolean);
+    let recordings = [];
+    if (callSids.length > 0) {
+      recordings = await mongoose.connection.db.collection('callRecordings')
+        .find({ callSid: { $in: callSids } })
+        .toArray();
+    }
+
+    // Map recordings by callSid
+    const recordingMap = new Map();
+    for (const rec of recordings) {
+      recordingMap.set(rec.callSid, rec);
+    }
+
+    // Merge recording data into logs
+    const mergedLogs = logs.map(log => {
+      const rec = recordingMap.get(log.callSid);
+      if (rec) {
+        return {
+          ...log,
+          transcriptSummary: rec.issueSummary || rec.summary || log.postCallAnalysis?.summary || "No summary captured",
+          hasRecording: !!(rec.stereoAudioFileId || rec.stereoFileId || rec.userAudioFileId || rec.userFileId),
+          stereoAudioFileId: rec.stereoAudioFileId || rec.stereoFileId,
+          userAudioFileId: rec.userAudioFileId || rec.userFileId,
+        };
+      }
+      return {
+        ...log,
+        transcriptSummary: log.postCallAnalysis?.summary || "No summary captured",
+        hasRecording: false,
+      };
+    });
+
+    res.json({ logs: mergedLogs });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getVoiceCallRecording(req, res, next) {
+  try {
+    const { id } = req.params; // callSid or MongoDB _id
+
+    // Find the call recording metadata to get the GridFS file ID
+    const rec = await mongoose.connection.db.collection('callRecordings').findOne({
+      $or: [
+        { callSid: id },
+        { call_sid: id }
+      ]
+    });
+
+    if (!rec) {
+      return res.status(404).json({ error: 'Call recording metadata not found' });
+    }
+
+    // Try to get the stereo file first, then fallback to user file
+    const fileId = rec.stereoAudioFileId || rec.stereoFileId || rec.userAudioFileId || rec.userFileId;
+    if (!fileId) {
+      return res.status(404).json({ error: 'No audio recording file associated with this call' });
+    }
+
+    // Convert fileId to ObjectId if it is stored as a string or ObjectId
+    let objectId;
+    try {
+      objectId = typeof fileId === 'string' ? new mongoose.Types.ObjectId(fileId) : fileId;
+    } catch (err) {
+      // If it's not a valid ObjectId, search by filename in fs.files
+      const fileDoc = await mongoose.connection.db.collection('fs.files').findOne({
+        $or: [
+          { filename: `stereo_${rec.callSid}.wav` },
+          { filename: `user_${rec.callSid}.wav` }
+        ]
+      });
+      if (fileDoc) {
+        objectId = fileDoc._id;
+      } else {
+        return res.status(400).json({ error: 'Invalid audio file reference' });
+      }
+    }
+
+    // Set response headers for audio streaming
+    res.set({
+      'Content-Type': 'audio/wav',
+      'Transfer-Encoding': 'chunked',
+    });
+
+    const bucket = new mongoose.mongo.GridFSBucket(mongoose.connection.db, {
+      bucketName: 'fs',
+    });
+
+    const downloadStream = bucket.openDownloadStream(objectId);
+
+    downloadStream.on('data', (chunk) => {
+      res.write(chunk);
+    });
+
+    downloadStream.on('error', (err) => {
+      console.error('GridFS streaming error:', err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Error streaming audio file' });
+      }
+    });
+
+    downloadStream.on('end', () => {
+      res.end();
+    });
   } catch (err) {
     next(err);
   }

@@ -11,11 +11,13 @@ import {
   getCustomerOrders,
 } from '../controllers/orderController.js';
 import { authenticate, requireManager } from '../middleware/auth.js';
+import { validate } from '../middleware/validate.js';
+import { createOrderSchema } from '../schemas/orderSchema.js';
 
 export const orderRoutes = Router();
 
 // Public / Customer PWA endpoints
-orderRoutes.post('/', createOrder); // Anyone can create an order (guest checkout supported)
+orderRoutes.post('/', validate(createOrderSchema), createOrder); // Anyone can create an order (guest checkout supported)
 orderRoutes.get('/ref/:reference', getOrderByRef); // Public tracker page
 orderRoutes.get('/my-orders', authenticate, getCustomerOrders); // Logged-in customer orders
 

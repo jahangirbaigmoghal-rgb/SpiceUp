@@ -121,6 +121,7 @@ class GeminiBridge:
                                     type="OBJECT",
                                     properties={
                                         "menu_item_id": types.Schema(type="STRING"),
+                                        "variation_id": types.Schema(type="STRING", description="Optional variation ID, e.g. for portion sizes or builds"),
                                         "name": types.Schema(type="STRING"),
                                         "quantity": types.Schema(type="INTEGER"),
                                         "modifiers": types.Schema(
@@ -184,6 +185,7 @@ class GeminiBridge:
                                     type="OBJECT",
                                     properties={
                                         "menu_item_id": types.Schema(type="STRING"),
+                                        "variation_id": types.Schema(type="STRING", description="Optional variation ID, e.g. for portion sizes or builds"),
                                         "name": types.Schema(type="STRING"),
                                         "quantity": types.Schema(type="INTEGER"),
                                         "modifiers": types.Schema(
@@ -234,6 +236,7 @@ class GeminiBridge:
                                     type="OBJECT",
                                     properties={
                                         "menu_item_id": types.Schema(type="STRING"),
+                                        "variation_id": types.Schema(type="STRING", description="Optional variation ID, e.g. for portion sizes or builds"),
                                         "name": types.Schema(type="STRING"),
                                         "quantity": types.Schema(type="INTEGER"),
                                         "modifiers": types.Schema(

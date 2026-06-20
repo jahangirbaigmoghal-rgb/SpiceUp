@@ -83,6 +83,9 @@ interface CartItem {
     optionId: string;
     optionName: string;
     pricePence: number;
+    labelId?: string;
+    labelName?: string;
+    kitchenText?: string;
   }>;
   notes?: string;
   variation?: {
@@ -116,6 +119,9 @@ interface CartItem {
       optionId: string;
       optionName: string;
       pricePence: number;
+      labelId?: string;
+      labelName?: string;
+      kitchenText?: string;
     }>;
     itemNote?: string;
     slotLabel: string;
@@ -156,7 +162,14 @@ export default function App() {
   const [deliveryFee, setDeliveryFee] = useState(0);
 
   const [activeItem, setActiveItem] = useState<MenuItem | null>(null);
-  const [selectedMods, setSelectedMods] = useState<Record<string, Array<{ optionId: string; optionName: string; pricePence: number }>>>({});
+  const [selectedMods, setSelectedMods] = useState<Record<string, Array<{
+    optionId: string;
+    optionName: string;
+    pricePence: number;
+    labelId?: string;
+    labelName?: string;
+    kitchenText?: string;
+  }>>>({});
 
   // Variations & Sequential wizard states
   const [selectedVariation, setSelectedVariation] = useState<any>(null);
@@ -396,7 +409,12 @@ export default function App() {
         const entry = {
           optionId: option._id,
           optionName: option.name,
-          pricePence: option.pricePence
+          pricePence: option.pricePence,
+          groupId: group._id,
+          groupName: group.name,
+          labelId: undefined,
+          labelName: undefined,
+          kitchenText: option.name
         };
         
         if (group.maxSelection === 1) {
@@ -422,7 +440,10 @@ export default function App() {
       updatedSelection[index] = {
         ...updatedSelection[index],
         optionName: `${labelPrefix}${option.name}`,
-        pricePence: displayPrice
+        pricePence: displayPrice,
+        labelId: label ? label._id : undefined,
+        labelName: label ? label.name : undefined,
+        kitchenText: label ? `${label.name} ${option.name}` : option.name
       };
 
       return { ...prev, [group._id]: updatedSelection };
@@ -465,7 +486,10 @@ export default function App() {
             groupName: g.name,
             optionId: sel.optionId,
             optionName: sel.optionName,
-            pricePence: sel.pricePence
+            pricePence: sel.pricePence,
+            labelId: (sel as any).labelId,
+            labelName: (sel as any).labelName,
+            kitchenText: (sel as any).kitchenText || sel.optionName
           });
         });
       }
@@ -832,6 +856,11 @@ export default function App() {
               modifierGroupId: m.groupId,
               optionId: m.optionId,
               name: m.optionName,
+              optionName: m.optionName,
+              groupName: m.groupName,
+              labelId: (m as any).labelId,
+              labelName: (m as any).labelName,
+              kitchenText: (m as any).kitchenText || m.optionName,
               pricePence: m.pricePence
             }))
           };
@@ -849,6 +878,11 @@ export default function App() {
                 modifierGroupId: m.groupId,
                 optionId: m.optionId,
                 name: m.optionName,
+                optionName: m.optionName,
+                groupName: m.groupName,
+                labelId: (m as any).labelId,
+                labelName: (m as any).labelName,
+                kitchenText: (m as any).kitchenText || m.optionName,
                 pricePence: m.pricePence
               }))
             }))

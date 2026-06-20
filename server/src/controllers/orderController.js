@@ -8,6 +8,10 @@ import Customer from '../models/Customer.js';
 import Category from '../models/Category.js';
 import Variation from '../models/Variation.js';
 import Bundle from '../models/Bundle.js';
+import Label from '../models/Label.js';
+import Setting from '../models/Setting.js';
+import { audit } from '../utils/audit.js';
+import { printCustomerReceipt, printKitchenTickets, printTokenReceipt } from '../services/printerService.js';
 import { emitNewOrder, emitOrderStatusUpdate } from '../config/socket.js';
 import stripePackage from 'stripe';
 import PDFDocument from 'pdfkit';
@@ -33,130 +37,369 @@ function isPremiumTopping(optionName) {
   return premiumKeywords.some(keyword => name.includes(keyword));
 }
 
-async function processMenuItemAndModifiers(tenantId, menuItemId, selectedVariationId, selectedModifiers, quantity) {
-  const dbItem = await MenuItem.findOne({ _id: menuItemId, tenant: tenantId })
-    .populate('modifierGroups')
-    .populate('groupAssignments.group');
-  if (!dbItem || !dbItem.isAvailable) {
-    throw new Error(`Menu item not found or unavailable: ${menuItemId}`);
+function isNowInSchedule(schedule, now = new Date()) {
+  if (!schedule || !schedule.startTime || !schedule.endTime) return true;
+  if (Array.isArray(schedule.days) && schedule.days.length > 0 && !schedule.days.includes(now.getDay())) {
+    return false;
   }
-  const activeModifierGroups = dbItem.groupAssignments?.length
-    ? dbItem.groupAssignments
-      .filter(assignment => assignment.isEnabled !== false && assignment.showOnPos !== false)
-      .map(assignment => assignment.group)
-      .filter(Boolean)
-    : dbItem.modifierGroups;
+  const current = now.getHours() * 60 + now.getMinutes();
+  const [startHour, startMinute] = schedule.startTime.split(':').map(Number);
+  const [endHour, endMinute] = schedule.endTime.split(':').map(Number);
+  const start = (startHour || 0) * 60 + (startMinute || 0);
+  const end = (endHour || 0) * 60 + (endMinute || 0);
+  return start <= end ? current >= start && current <= end : current >= start || current <= end;
+}
 
-  // 1. Fetch category and check if Pizza
+function normalizeChannel(channel = 'pos') {
+  if (channel === 'online') return 'website';
+  if (channel === 'voice-agent') return 'voice';
+  return ['pos', 'website', 'mobile', 'voice'].includes(channel) ? channel : 'pos';
+}
+
+async function processMenuItemAndModifiers(tenantId, menuItemId, selectedVariationId, selectedModifiers, quantity, channel = 'pos') {
+  const dbItem = await MenuItem.findOne({ _id: menuItemId, tenant: tenantId })
+    .populate({
+      path: 'category',
+      populate: { path: 'parent' }
+    })
+    .populate({
+      path: 'groupAssignments.group',
+      populate: {
+        path: 'options.component'
+      }
+    })
+    .populate({
+      path: 'modifierGroups',
+      populate: {
+        path: 'options.component'
+      }
+    })
+    .populate('productTime');
+
+  if (!dbItem) {
+    throw new Error(`Menu item not found: ${menuItemId}`);
+  }
+
+  // 1. Validate publishStatus is published (reject drafts)
+  if (dbItem.publishStatus === 'draft') {
+    throw new Error(`Product ${dbItem.name} is a draft and cannot be ordered.`);
+  }
+
+  // 2. Validate channel visibility (e.g. POS cannot order website-only items)
+  const menuSurface = normalizeChannel(channel);
+  if (dbItem.channels && dbItem.channels[menuSurface] === false) {
+    throw new Error(`Product ${dbItem.name} is disabled for channel: ${channel}`);
+  }
+  if (dbItem.category) {
+    if (dbItem.category.channels && dbItem.category.channels[menuSurface] === false) {
+      throw new Error(`Category ${dbItem.category.name} is disabled for channel: ${channel}`);
+    }
+    if (dbItem.category.parent && dbItem.category.parent.channels && dbItem.category.parent.channels[menuSurface] === false) {
+      throw new Error(`Parent category ${dbItem.category.parent.name} is disabled for channel: ${channel}`);
+    }
+  }
+
+  // 3. Validate hold status and product timing at order creation
+  if (dbItem.isAvailable === false) {
+    throw new Error(`Product ${dbItem.name} is currently inactive.`);
+  }
+  if (dbItem.holdStatus === true) {
+    throw new Error(`Product ${dbItem.name} is currently on hold.`);
+  }
+  if (!isNowInSchedule(dbItem.availabilitySchedule)) {
+    throw new Error(`Product ${dbItem.name} is not available in the current schedule.`);
+  }
+  if (dbItem.productTime && !isNowInSchedule(dbItem.productTime)) {
+    throw new Error(`Product ${dbItem.name} is outside its scheduled product timing.`);
+  }
+  if (dbItem.category && !isNowInSchedule(dbItem.category.availabilitySchedule)) {
+    throw new Error(`Category ${dbItem.category.name} is outside its scheduled timing.`);
+  }
+
+  // 4. Validate and resolve selected variation
+  let variationObj = null;
+  const allVariations = await Variation.find({ menuItem: dbItem._id, tenant: tenantId });
+  const activeVariations = allVariations.filter(v => v.isActive !== false);
+
+  if (selectedVariationId) {
+    const dbVar = allVariations.find(v => v._id.toString() === selectedVariationId.toString());
+    if (!dbVar) {
+      throw new Error(`Selected variation does not belong to product ${dbItem.name}`);
+    }
+    if (dbVar.isActive === false) {
+      throw new Error(`Selected variation ${dbVar.name} is inactive`);
+    }
+    variationObj = {
+      variationId: dbVar._id,
+      name: dbVar.name,
+      priceDeltaPence: dbVar.priceDeltaPence,
+      sku: dbVar.sku
+    };
+  } else if (activeVariations.length > 0) {
+    // If variations exist, selecting one is required. Let's look for default variation or pick the first active one.
+    const defaultVar = activeVariations.find(v => v.isDefault) || activeVariations[0];
+    variationObj = {
+      variationId: defaultVar._id,
+      name: defaultVar.name,
+      priceDeltaPence: defaultVar.priceDeltaPence,
+      sku: defaultVar.sku
+    };
+  }
+
+  // 5. Resolve active modifier groups for the product & channel
+  const assignments = (dbItem.groupAssignments || [])
+    .filter(assignment => assignment.isEnabled !== false)
+    .filter(assignment => assignment.group?.isActive !== false)
+    .filter(assignment => {
+      if (menuSurface === 'website') return assignment.showOnWebsite !== false;
+      if (menuSurface === 'voice') return assignment.showOnVoice !== false;
+      return assignment.showOnPos !== false;
+    });
+
+  const activeGroups = assignments.length > 0
+    ? assignments.map(a => {
+        const group = a.group;
+        const requiredOverride = a.requiredOverride;
+        const type = requiredOverride === true ? 'required' : requiredOverride === false ? 'optional' : group.type;
+        const minSelections = requiredOverride === true && !group.minSelections ? 1 : (group.minSelections ?? 0);
+        return {
+          group,
+          type,
+          minSelections,
+          maxSelections: group.maxSelections ?? group.maxSelection ?? 1,
+        };
+      })
+    : (dbItem.modifierGroups || [])
+        .filter(g => g.isActive !== false)
+        .filter(g => {
+          if (menuSurface === 'website') return g.showOnWebsite !== false;
+          if (menuSurface === 'voice') return g.showOnVoice !== false;
+          return g.showOnPos !== false;
+        })
+        .map(g => ({
+          group: g,
+          type: g.type,
+          minSelections: g.minSelections ?? 0,
+          maxSelections: g.maxSelections ?? g.maxSelection ?? 1,
+        }));
+
+  // 6. Validate selected modifier choices
+  const selectedModifiersList = selectedModifiers || [];
+
+  for (const mod of selectedModifiersList) {
+    const groupIdStr = (mod.groupId || mod.modifierGroupId)?.toString();
+    const optIdStr = (mod.optionId || mod.id)?.toString();
+
+    // Verify group is assigned to product and active
+    const activeGroupRecord = activeGroups.find(ag => ag.group._id.toString() === groupIdStr);
+    if (!activeGroupRecord) {
+      throw new Error(`Modifier group is not active or not assigned to product: ${groupIdStr}`);
+    }
+
+    const modGroup = activeGroupRecord.group;
+
+    if (mod.isManual) {
+      if (channel !== 'pos') {
+        throw new Error(`Manual add-ons are only allowed for POS orders.`);
+      }
+      if (!mod.name && !mod.optionName) {
+        throw new Error(`Manual add-on requires a name`);
+      }
+      const price = Number(mod.priceDeltaPence ?? mod.pricePence ?? 0);
+      if (isNaN(price) || price < 0) {
+        throw new Error(`Manual add-on requires a valid non-negative price`);
+      }
+      continue;
+    }
+
+    // Verify option belongs to group and is active
+    const opt = modGroup.options.find(o => o._id.toString() === optIdStr);
+    if (!opt) {
+      throw new Error(`Option ${optIdStr} does not belong to modifier group ${modGroup.name}`);
+    }
+    if (opt.isAvailable === false) {
+      throw new Error(`Option ${opt.name} in group ${modGroup.name} is inactive/unavailable`);
+    }
+
+    // Verify component of option is active
+    if (opt.component && opt.component.isActive === false) {
+      throw new Error(`Component for option ${opt.name} is inactive/unavailable`);
+    }
+  }
+
+  // 7. Enforce group min/max selection bounds
+  for (const ag of activeGroups) {
+    const modGroup = ag.group;
+    const selectionsInGroup = selectedModifiersList.filter(m => (m.groupId || m.modifierGroupId)?.toString() === modGroup._id.toString());
+    const count = selectionsInGroup.length;
+
+    const min = ag.type === 'required' ? Math.max(ag.minSelections || 0, 1) : (ag.minSelections || 0);
+    if (count < min) {
+      throw new Error(`Modifier group ${modGroup.name} requires at least ${min} selection(s), but only ${count} selected.`);
+    }
+
+    const max = ag.maxSelections || 1;
+    if (count > max) {
+      throw new Error(`Modifier group ${modGroup.name} allows at most ${max} selection(s), but ${count} selected.`);
+    }
+  }
+
+  // 8. Resolve pizza category and labels
   let isPizzaCategory = false;
   if (dbItem.category) {
-    const dbCategory = await Category.findOne({ _id: dbItem.category, tenant: tenantId });
-    if (dbCategory && (dbCategory.name.toLowerCase() === 'pizza' || dbCategory.name.toLowerCase().includes('pizza'))) {
+    if (dbItem.category.name.toLowerCase() === 'pizza' || dbItem.category.name.toLowerCase().includes('pizza')) {
       isPizzaCategory = true;
     }
   }
 
-  // 2. Fetch Variation
-  let variationObj = null;
-  if (selectedVariationId) {
-    const dbVar = await Variation.findOne({ _id: selectedVariationId, menuItem: dbItem._id, tenant: tenantId });
-    if (dbVar) {
-      variationObj = {
-        variationId: dbVar._id,
-        name: dbVar.name,
-        priceDeltaPence: dbVar.priceDeltaPence,
-        sku: dbVar.sku
-      };
-    }
-  }
-  if (!variationObj) {
-    const defaultVar = await Variation.findOne({ menuItem: dbItem._id, tenant: tenantId, isDefault: true }) || await Variation.findOne({ menuItem: dbItem._id, tenant: tenantId });
-    if (defaultVar) {
-      variationObj = {
-        variationId: defaultVar._id,
-        name: defaultVar.name,
-        priceDeltaPence: defaultVar.priceDeltaPence,
-        sku: defaultVar.sku
-      };
-    }
-  }
-
-  // 3. Modifiers
+  const tenantLabels = await Label.find({ tenant: tenantId });
+  const toppingsGroupMods = [];
+  const otherMods = [];
   let modifierDeltaPence = 0;
   const processedModifiers = [];
 
-  if (selectedModifiers && Array.isArray(selectedModifiers)) {
-    const toppingsGroupMods = [];
-    const otherMods = [];
+  for (const mod of selectedModifiersList) {
+    const groupIdStr = (mod.groupId || mod.modifierGroupId)?.toString();
+    const optIdStr = (mod.optionId || mod.id)?.toString();
 
-    for (const mod of selectedModifiers) {
-      const modGroup = activeModifierGroups.find(g => g._id.toString() === (mod.groupId || mod.modifierGroupId)?.toString());
-      if (!modGroup) continue;
+    const activeGroupRecord = activeGroups.find(ag => ag.group._id.toString() === groupIdStr);
+    const modGroup = activeGroupRecord.group;
 
-      const opt = modGroup.options.find(o => o._id.toString() === (mod.optionId || mod.id)?.toString());
-      if (!opt || !opt.isAvailable) continue;
+    if (mod.isManual) {
+      const priceDelta = Number(mod.priceDeltaPence ?? mod.pricePence ?? 0);
+      const modInfo = {
+        groupName: modGroup.name,
+        groupId: modGroup._id,
+        optionName: mod.name || mod.optionName || 'Manual Add-on',
+        optionId: optIdStr || new mongoose.Types.ObjectId().toString(),
+        labelId: null,
+        labelName: null,
+        kitchenText: mod.kitchenText || mod.optionName || 'Manual Add-on',
+        priceDeltaPence: priceDelta,
+        isManual: true,
+        printOnReceipt: mod.printOnReceipt !== false,
+      };
+      otherMods.push(modInfo);
+      continue;
+    }
 
-      const isToppingsGroup = isPizzaCategory && modGroup.name.toLowerCase().includes('topping');
-      if (isToppingsGroup) {
-        toppingsGroupMods.push({ modGroup, opt });
+    const opt = modGroup.options.find(o => o._id.toString() === optIdStr);
+
+    let labelId = mod.labelId || null;
+    let labelName = mod.labelName || null;
+    let labelKitchenText = mod.kitchenText || null;
+
+    // Parse label prefix if not explicitly sent
+    const modName = mod.name || mod.optionName || '';
+    if (!labelId && modName !== opt.name) {
+      for (const lbl of tenantLabels) {
+        if (lbl.isActive && modName.startsWith(`${lbl.name} `) && modName.slice(lbl.name.length + 1) === opt.name) {
+          labelId = lbl._id;
+          labelName = lbl.name;
+          labelKitchenText = lbl.kitchenText || lbl.name;
+          break;
+        }
+      }
+    }
+
+    // Validate label constraints
+    if (labelId) {
+      const dbLabel = tenantLabels.find(l => l._id.toString() === labelId.toString());
+      if (!dbLabel) {
+        throw new Error(`Selected label ${labelId} not found`);
+      }
+      if (dbLabel.isActive === false) {
+        throw new Error(`Label ${dbLabel.name} is inactive`);
+      }
+
+      // Reject label usage when disabled for the group
+      if (modGroup.staticLabelsEnabled === false) {
+        throw new Error(`Labels are disabled for modifier group ${modGroup.name}`);
+      }
+
+      // Validate label allowed for modifier group
+      if (modGroup.allowedLabelIds && modGroup.allowedLabelIds.length > 0) {
+        const isAllowed = modGroup.allowedLabelIds.some(id => id.toString() === labelId.toString());
+        if (!isAllowed) {
+          throw new Error(`Label ${dbLabel.name} is not allowed for modifier group ${modGroup.name}`);
+        }
+      }
+
+      labelName = dbLabel.name;
+      labelKitchenText = dbLabel.kitchenText || dbLabel.name;
+    }
+
+    const isToppingsGroup = isPizzaCategory && modGroup.name.toLowerCase().includes('topping');
+
+    // Surcharge rules
+    let baseOptPrice = modGroup.samePrice ? (modGroup.samePricePence || 0) : (opt.priceDeltaPence || 0);
+    if (labelName === 'NO') {
+      baseOptPrice = 0;
+    }
+
+    const modInfo = {
+      groupName: modGroup.name,
+      groupId: modGroup._id,
+      optionName: labelName ? `${labelName} ${opt.name}` : opt.name,
+      optionId: opt._id,
+      labelId,
+      labelName,
+      kitchenText: labelKitchenText,
+      priceDeltaPence: baseOptPrice
+    };
+
+    if (isToppingsGroup) {
+      toppingsGroupMods.push(modInfo);
+    } else {
+      otherMods.push(modInfo);
+    }
+  }
+
+  // Calculate pricing for non-toppings
+  for (const m of otherMods) {
+    modifierDeltaPence += m.priceDeltaPence;
+    processedModifiers.push(m);
+  }
+
+  // Handle pizza toppings premium / limits logic
+  if (toppingsGroupMods.length > 0) {
+    let vegCount = 0;
+    const resolvedToppings = [];
+
+    for (const m of toppingsGroupMods) {
+      const isPremium = isPremiumTopping(m.optionName);
+      if (isPremium) {
+        resolvedToppings.push({
+          ...m,
+          isPremium: true,
+          priceDeltaPence: m.labelName === 'NO' ? 0 : 100,
+        });
       } else {
-        otherMods.push({ modGroup, opt });
-      }
-    }
-
-    for (const m of otherMods) {
-      modifierDeltaPence += m.opt.priceDeltaPence;
-      processedModifiers.push({
-        groupName: m.modGroup.name,
-        groupId: m.modGroup._id,
-        optionName: m.opt.name,
-        optionId: m.opt._id,
-        priceDeltaPence: m.opt.priceDeltaPence,
-      });
-    }
-
-    if (toppingsGroupMods.length > 0) {
-      let vegCount = 0;
-      const resolvedToppings = [];
-
-      for (const m of toppingsGroupMods) {
-        const isPremium = isPremiumTopping(m.opt.name);
-        if (isPremium) {
-          resolvedToppings.push({
-            groupName: m.modGroup.name,
-            groupId: m.modGroup._id,
-            optionName: m.opt.name,
-            optionId: m.opt._id,
-            isPremium: true,
-            priceDeltaPence: 100,
-          });
-        } else {
-          vegCount++;
-          resolvedToppings.push({
-            groupName: m.modGroup.name,
-            groupId: m.modGroup._id,
-            optionName: m.opt.name,
-            optionId: m.opt._id,
-            isPremium: false,
-            vegIndex: vegCount,
-            priceDeltaPence: 0,
-          });
-        }
-      }
-
-      for (const top of resolvedToppings) {
-        if (!top.isPremium) {
-          top.priceDeltaPence = top.vegIndex > 5 ? 80 : 0;
-        }
-        modifierDeltaPence += top.priceDeltaPence;
-        processedModifiers.push({
-          groupName: top.groupName,
-          groupId: top.groupId,
-          optionName: top.optionName,
-          optionId: top.optionId,
-          priceDeltaPence: top.priceDeltaPence,
+        vegCount++;
+        resolvedToppings.push({
+          ...m,
+          isPremium: false,
+          vegIndex: vegCount,
+          priceDeltaPence: 0,
         });
       }
+    }
+
+    for (const top of resolvedToppings) {
+      if (!top.isPremium && top.labelName !== 'NO') {
+        top.priceDeltaPence = top.vegIndex > 5 ? 80 : 0;
+      }
+      modifierDeltaPence += top.priceDeltaPence;
+      processedModifiers.push({
+        groupName: top.groupName,
+        groupId: top.groupId,
+        optionName: top.optionName,
+        optionId: top.optionId,
+        labelId: top.labelId,
+        labelName: top.labelName,
+        kitchenText: top.kitchenText,
+        priceDeltaPence: top.priceDeltaPence,
+      });
     }
   }
 
@@ -175,7 +418,7 @@ async function processMenuItemAndModifiers(tenantId, menuItemId, selectedVariati
 }
 
 export function compileKitchenTickets(order, staffUsername = 'STAFF') {
-  const border = '────────────────────────────────────────────────';
+  const border = 'ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ';
   const timestamp = new Date(order.createdAt || Date.now()).toISOString().replace('T', ' ').slice(0, 19);
   
   let header = `${border}\nORDER #${order.reference.slice(-4)} | ${order.channel.toUpperCase()} ENTRY | SERVED BY: ${staffUsername.toUpperCase()}\nTIMESTAMP: ${timestamp} | TERMINAL: ${order.terminalId || 'MAIN'}\n${border}`;
@@ -199,23 +442,23 @@ export function compileKitchenTickets(order, staffUsername = 'STAFF') {
   const addLineToStation = (line, isInsideBundle = false, bundleQty = 1) => {
     const qty = isInsideBundle ? bundleQty : line.quantity;
     const snap = line.menuItemSnapshot;
-    const stationId = snap.kitchenStationId || 'OTHER';
+    const stationId = (snap.kitchenStationId && stationGroups[snap.kitchenStationId]) ? snap.kitchenStationId : 'OTHER';
     
     let text = `${qty}x ${snap.name.toUpperCase()}`;
     if (line.variation) {
-      text += `\n   → SIZE/PORTION: ${line.variation.name}   [SKU: ${line.variation.sku || 'N/A'}]`;
+      text += `\n   ΓåÆ SIZE/PORTION: ${line.variation.name}   [SKU: ${line.variation.sku || 'N/A'}]`;
     }
     
     if (line.modifiers && line.modifiers.length > 0) {
       for (const m of line.modifiers) {
         const sign = m.priceDeltaPence >= 0 ? '+' : '';
-        const priceText = m.priceDeltaPence === 0 ? 'FREE allowance' : `${sign}£${(m.priceDeltaPence / 100).toFixed(2)}`;
-        text += `\n   → ${m.groupName.toUpperCase()}: ${m.optionName}   [${priceText}]`;
+        const priceText = m.priceDeltaPence === 0 ? 'FREE allowance' : `${sign}┬ú${(m.priceDeltaPence / 100).toFixed(2)}`;
+        text += `\n   ΓåÆ ${m.groupName.toUpperCase()}: ${m.optionName}   [${priceText}]`;
       }
     }
     
     if (line.itemNote) {
-      text += `\n   → NOTE: "${line.itemNote}"`;
+      text += `\n   ΓåÆ NOTE: "${line.itemNote}"`;
     }
     
     stationGroups[stationId].push(text);
@@ -258,7 +501,7 @@ export async function listOrders(req, res, next) {
       if (endDate) query.createdAt.$lte = new Date(endDate);
     }
 
-    const orders = await Order.find(query).sort({ createdAt: -1 });
+    const orders = await Order.find(query).populate('assignedDriver').sort({ createdAt: -1 });
     res.json({ orders });
   } catch (err) {
     next(err);
@@ -307,11 +550,14 @@ export async function createOrder(req, res, next) {
         const variationId = line.variationId || (line.variation && (line.variation.variationId || line.variation._id));
         const quantity = line.quantity || 1;
         const itemNote = line.itemNote || line.notes;
-        const modifiers = (line.modifiers || []).map(m => ({
+        const modifiers = (line.modifiers || line.selectedModifiers || []).map(m => ({
           groupId: m.modifierGroupId || m.groupId,
           optionId: m.optionId || m.id || m._id,
           optionName: m.name || m.optionName,
-          priceDeltaPence: m.pricePence !== undefined ? m.pricePence : (m.priceDeltaPence || 0)
+          priceDeltaPence: m.pricePence !== undefined ? m.pricePence : (m.priceDeltaPence || 0),
+          labelId: m.labelId || null,
+          labelName: m.labelName || null,
+          kitchenText: m.kitchenText || null,
         }));
         
         let bundleItems = line.bundleItems;
@@ -319,11 +565,14 @@ export async function createOrder(req, res, next) {
           bundleItems = bundleItems.map(bi => {
             const biMenuItem = bi.menuItem || bi.menuItemId;
             const biVariationId = bi.variationId || (bi.variation && (bi.variation.variationId || bi.variation._id));
-            const biModifiers = (bi.modifiers || []).map(m => ({
+            const biModifiers = (bi.modifiers || bi.selectedModifiers || []).map(m => ({
               groupId: m.modifierGroupId || m.groupId,
               optionId: m.optionId || m.id || m._id,
               optionName: m.name || m.optionName,
-              priceDeltaPence: m.pricePence !== undefined ? m.pricePence : (m.priceDeltaPence || 0)
+              priceDeltaPence: m.pricePence !== undefined ? m.pricePence : (m.priceDeltaPence || 0),
+              labelId: m.labelId || null,
+              labelName: m.labelName || null,
+              kitchenText: m.kitchenText || null,
             }));
             return {
               menuItem: biMenuItem,
@@ -353,7 +602,7 @@ export async function createOrder(req, res, next) {
     if (idempotencyKey) {
       const existing = await Order.findOne({ tenant: req.tenantId, idempotencyKey });
       if (existing) {
-        console.log(`♻️ Idempotency triggered — returning existing order: ${existing.reference}`);
+        console.log(`ΓÖ╗∩╕Å Idempotency triggered ΓÇö returning existing order: ${existing.reference}`);
         return res.json({ order: existing, duplicate: true });
       }
     }
@@ -398,7 +647,8 @@ export async function createOrder(req, res, next) {
               matchingItem.menuItem,
               matchingItem.variationId,
               matchingItem.modifiers,
-              1
+              1,
+              channel
             );
 
             const childSurcharge = (processedChild.variationObj ? processedChild.variationObj.priceDeltaPence : 0) +
@@ -457,7 +707,8 @@ export async function createOrder(req, res, next) {
           line.menuItem,
           line.variationId,
           line.modifiers,
-          line.quantity
+          line.quantity,
+          channel
         );
 
         const lineTotalPence = processedChild.itemTotalPence * line.quantity;
@@ -537,7 +788,7 @@ export async function createOrder(req, res, next) {
 
       if (subtotalPence < zone.minimumOrderPence) {
         return res.status(400).json({
-          error: `Minimum order for delivery is £${(zone.minimumOrderPence / 100).toFixed(2)}. Subtotal: £${(subtotalPence / 100).toFixed(2)}`,
+          error: `Minimum order for delivery is ┬ú${(zone.minimumOrderPence / 100).toFixed(2)}. Subtotal: ┬ú${(subtotalPence / 100).toFixed(2)}`,
         });
       }
 
@@ -633,6 +884,17 @@ export async function createOrder(req, res, next) {
       statusHistory: [{ status: 'placed', changedBy: req.userId }],
     });
 
+    const settings = await Setting.findOne({ tenant: req.tenantId });
+    if (settings && settings.printerEnabled) {
+      if (settings.printCustomerReceipt) {
+        printCustomerReceipt(order, settings).catch(err => console.error("Customer print error:", err));
+      }
+      if (settings.printKitchenTicket) {
+        printKitchenTickets(order, settings, true).catch(err => console.error("Kitchen print error:", err));
+      }
+      printTokenReceipt(order, settings).catch(err => console.error("Token print error:", err));
+    }
+
     const ticketText = compileKitchenTickets(order, staffUsername);
     console.log(ticketText);
 
@@ -640,6 +902,9 @@ export async function createOrder(req, res, next) {
 
     res.status(201).json({ order, kitchenTicket: ticketText });
   } catch (err) {
+    if (err instanceof Error && !err.status && !err.statusCode) {
+      err.status = 400;
+    }
     next(err);
   }
 }
@@ -659,7 +924,7 @@ export async function getOrderDetails(req, res, next) {
 export async function advanceOrderStatus(req, res, next) {
   try {
     const { id } = req.params;
-    const { status, estimatedReadyAt } = req.body;
+    const { status, estimatedReadyAt, assignedDriver } = req.body;
 
     const order = await Order.findOne({ _id: id, tenant: req.tenantId });
     if (!order) {
@@ -680,6 +945,10 @@ export async function advanceOrderStatus(req, res, next) {
 
     if (estimatedReadyAt) {
       order.estimatedReadyAt = new Date(estimatedReadyAt);
+    }
+
+    if (assignedDriver !== undefined) {
+      order.assignedDriver = assignedDriver || null;
     }
 
     // Auto-mark payment as paid if driver delivers/collected on cash
@@ -712,6 +981,8 @@ export async function cancelOrder(req, res, next) {
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
     }
+
+    const before = order.toObject();
 
     order.status = 'cancelled';
     order.statusHistory.push({ status: 'cancelled', changedBy: req.userId });
@@ -748,6 +1019,7 @@ export async function cancelOrder(req, res, next) {
 
     await order.save();
 
+    await audit(req, 'cancel_order', 'Order', order._id, { before, after: order, reason });
     emitOrderStatusUpdate(req.tenantId, id, 'cancelled');
 
     res.json({ order });
@@ -769,6 +1041,8 @@ export async function refundOrder(req, res, next) {
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
     }
+
+    const before = order.toObject();
 
     // Deduct and process refund on Stripe if possible
     const stripePayment = order.payments.find(p => p.method === 'stripe' && p.status === 'paid');
@@ -801,6 +1075,8 @@ export async function refundOrder(req, res, next) {
     });
 
     await order.save();
+
+    await audit(req, 'refund_order', 'Order', order._id, { before, after: order, amountPence, reason });
 
     res.json({ order });
   } catch (err) {
@@ -876,9 +1152,9 @@ export async function generateReceiptPdf(req, res, next) {
     doc.fontSize(8);
     for (const line of order.lines) {
       const itemPrice = (line.lineTotalPence / 100).toFixed(2);
-      doc.text(`${line.quantity}x ${line.menuItemSnapshot.name} - £${itemPrice}`);
+      doc.text(`${line.quantity}x ${line.menuItemSnapshot.name} - ┬ú${itemPrice}`);
       for (const mod of line.modifiers) {
-        doc.text(`  + ${mod.optionName} (+£${(mod.priceDeltaPence / 100).toFixed(2)})`, { indent: 10 });
+        doc.text(`  + ${mod.optionName} (+┬ú${(mod.priceDeltaPence / 100).toFixed(2)})`, { indent: 10 });
       }
       if (line.itemNote) {
         doc.text(`  * Note: ${line.itemNote}`, { indent: 10, fill: '#ff0000' });
@@ -886,24 +1162,75 @@ export async function generateReceiptPdf(req, res, next) {
     }
 
     doc.fontSize(9).text('-------------------------------------', { align: 'center' });
-    doc.text(`Subtotal: £${(order.subtotalPence / 100).toFixed(2)}`);
+    doc.text(`Subtotal: ┬ú${(order.subtotalPence / 100).toFixed(2)}`);
     if (order.discountPence > 0) {
-      doc.text(`Discount: -£${(order.discountPence / 100).toFixed(2)} (${order.discountReason || ''})`);
+      doc.text(`Discount: -┬ú${(order.discountPence / 100).toFixed(2)} (${order.discountReason || ''})`);
     }
     if (order.deliveryChargePence > 0) {
-      doc.text(`Delivery Charge: £${(order.deliveryChargePence / 100).toFixed(2)}`);
+      doc.text(`Delivery Charge: ┬ú${(order.deliveryChargePence / 100).toFixed(2)}`);
     }
-    doc.fontSize(10).text(`TOTAL: £${(order.totalPence / 100).toFixed(2)}`, { bold: true });
+    doc.fontSize(10).text(`TOTAL: ┬ú${(order.totalPence / 100).toFixed(2)}`, { bold: true });
 
     // Payments
     doc.fontSize(8).text('-------------------------------------', { align: 'center' });
     for (const p of order.payments) {
-      doc.text(`Payment: ${p.method.toUpperCase()} - ${p.status.toUpperCase()} (£${(p.amountPence / 100).toFixed(2)})`);
+      doc.text(`Payment: ${p.method.toUpperCase()} - ${p.status.toUpperCase()} (┬ú${(p.amountPence / 100).toFixed(2)})`);
     }
 
     doc.fontSize(8).text('\nThank you for your business!', { align: 'center' });
 
     doc.end();
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function reprintCustomer(req, res, next) {
+  try {
+    const order = await Order.findOne({ _id: req.params.id, tenant: req.tenantId });
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+    const settings = await Setting.findOne({ tenant: req.tenantId });
+    if (!settings) {
+      return res.status(404).json({ error: 'Settings not found' });
+    }
+    const success = await printCustomerReceipt(order, settings);
+    res.json({ success, message: success ? 'Receipt printed successfully.' : 'Failed to print receipt.' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function reprintKitchen(req, res, next) {
+  try {
+    const order = await Order.findOne({ _id: req.params.id, tenant: req.tenantId });
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+    const settings = await Setting.findOne({ tenant: req.tenantId });
+    if (!settings) {
+      return res.status(404).json({ error: 'Settings not found' });
+    }
+    const success = await printKitchenTickets(order, settings, false);
+    res.json({ success, message: success ? 'Kitchen tickets printed successfully.' : 'Failed to print kitchen tickets.' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function reprintToken(req, res, next) {
+  try {
+    const order = await Order.findOne({ _id: req.params.id, tenant: req.tenantId });
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+    const settings = await Setting.findOne({ tenant: req.tenantId });
+    if (!settings) {
+      return res.status(404).json({ error: 'Settings not found' });
+    }
+    const success = await printTokenReceipt(order, settings);
+    res.json({ success, message: success ? 'Token printed successfully.' : 'Failed to print token.' });
   } catch (err) {
     next(err);
   }

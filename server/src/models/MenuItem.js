@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+﻿import mongoose from 'mongoose';
 
 const availabilityScheduleSchema = new mongoose.Schema({
   days: [{ type: Number, min: 0, max: 6 }], // 0=Sun, 6=Sat
@@ -10,6 +10,7 @@ const channelSchema = new mongoose.Schema({
   pos: { type: Boolean, default: true },
   website: { type: Boolean, default: true },
   mobile: { type: Boolean, default: true },
+  voice: { type: Boolean, default: true },
 }, { _id: false });
 
 const groupAssignmentSchema = new mongoose.Schema({
@@ -18,13 +19,17 @@ const groupAssignmentSchema = new mongoose.Schema({
   requiredOverride: { type: Boolean, default: null },
   posOrder: { type: Number, default: 0 },
   websiteOrder: { type: Number, default: 0 },
+  voiceOrder: { type: Number, default: 0 },
   showOnPos: { type: Boolean, default: true },
   showOnWebsite: { type: Boolean, default: true },
+  showOnVoice: { type: Boolean, default: true },
 }, { _id: false });
 
 const menuItemSchema = new mongoose.Schema({
   tenant: { type: mongoose.Schema.Types.ObjectId, ref: 'Tenant', required: true },
   name:   { type: String, required: true, trim: true },
+  shortName: { type: String, trim: true },
+  kitchenName: { type: String, trim: true },
   menuCode: { type: String, trim: true }, // Kitchen reference code, e.g., 'CTM-01'
   description: String,
   category: { type: mongoose.Schema.Types.ObjectId, ref: 'Category', required: true },
@@ -47,7 +52,9 @@ const menuItemSchema = new mongoose.Schema({
     default: 'published',
   },
   isAvailable: { type: Boolean, default: true },
+  holdStatus: { type: Boolean, default: false },
   isFeatured:  { type: Boolean, default: false },
+  productTime: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductTime', default: null },
   availabilitySchedule: availabilityScheduleSchema, // null = always available
   sortOrder: { type: Number, default: 0 },
   backgroundColor: { type: String, default: '#1e293b' },
@@ -57,7 +64,7 @@ const menuItemSchema = new mongoose.Schema({
   shorthand: { type: String },
   kitchenStationId: {
     type: String,
-    enum: ['PIZZA_LINE', 'HOT_GRILL_LINE', 'CURRY_LINE', 'OTHER'],
+    enum: ['PIZZA_LINE', 'HOT_GRILL_LINE', 'CURRY_LINE', 'STARTER_LINE', 'SFC_LINE', 'OTHER'],
     default: 'OTHER'
   },
 }, { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } });

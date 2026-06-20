@@ -1,12 +1,16 @@
 import { app } from '../server/src/app.js';
 import { connectDb } from '../server/src/config/db.js';
-import { seedIfEmpty } from '../server/src/seed.js';
+import { seedIfEmpty, repairDefaultUserPins, ensureAdminExists } from '../server/src/seed.js';
 
 let ready;
 
 async function ensureReady() {
   if (!ready) {
-    ready = connectDb().then(seedIfEmpty);
+    ready = connectDb().then(async () => {
+      await seedIfEmpty();
+      await repairDefaultUserPins();
+      await ensureAdminExists();
+    });
   }
   return ready;
 }
