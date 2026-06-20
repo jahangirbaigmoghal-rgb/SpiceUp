@@ -1,6 +1,8 @@
 import { app } from '../server/src/app.js';
 import { connectDb } from '../server/src/config/db.js';
 import { seedIfEmpty, repairDefaultUserPins, ensureAdminExists } from '../server/src/seed.js';
+// force vercel cache invalidate 1
+
 
 let ready;
 
