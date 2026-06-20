@@ -50,6 +50,10 @@ app.use(cors({
 app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+app.use((req, res, next) => {
+  req.secret = env.cookieSecret || 'dev_cookie_secret';
+  next();
+});
 app.use(cookieParser(env.cookieSecret || 'dev_cookie_secret'));
 app.use(sanitizeBody);
 
@@ -62,6 +66,9 @@ app.get('/api/health', (_req, res) => res.json({
   service: 'takeaway-pos-pro-server',
   version: '1.0.0',
   timestamp: new Date().toISOString(),
+  cookieSecretType: typeof env.cookieSecret,
+  cookieSecretLength: env.cookieSecret?.length,
+  cookieSecretValue: env.cookieSecret ? env.cookieSecret.substring(0, 3) + '...' : null,
 }));
 
 // ─── Tenant Middleware ───────────────────────────────────────────────────────
