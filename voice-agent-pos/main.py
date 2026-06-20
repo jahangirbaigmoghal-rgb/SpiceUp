@@ -201,85 +201,11 @@ async def health(request: Request):
         except Exception as e:
             logger.error(f"Error querying active tenant profile: {e}")
             
-    # Fetch settings for diagnostics
-    db_settings = {}
-    if mongo_configured:
-        try:
-            settings_doc = database.settings.find_one({})
-            if settings_doc:
-                db_settings = {
-                    "voiceAgentModel": settings_doc.get("voiceAgentModel"),
-                    "voiceAgentVoice": settings_doc.get("voiceAgentVoice"),
-                    "voiceAgentBargeInEnabled": settings_doc.get("voiceAgentBargeInEnabled"),
-                    "storeOpenTime": settings_doc.get("storeOpenTime"),
-                    "storeCloseTime": settings_doc.get("storeCloseTime"),
-                    "storeIsOpen": settings_doc.get("storeIsOpen")
-                }
-        except Exception as e:
-            logger.error(f"Error querying settings in health check: {e}")
-
-    # Fetch available models for diagnostics
-    from google import genai
-    gemini_models = []
-    if config.gemini_api_key:
-        try:
-            client = genai.Client(api_key=config.gemini_api_key)
-            for m in client.models.list():
-                methods = [str(x) for x in getattr(m, 'supported_generation_methods', [])]
-                is_live = any("bidiGenerateContent" in method for method in methods)
-                gemini_models.append({
-                    "name": str(m.name),
-                    "isLive": is_live,
-                    "methods": methods
-                })
-        except Exception as e:
-            logger.error(f"Error listing models in health check: {e}")
-            gemini_models = [{"error": str(e)}]
-
-    # Fetch latest call logs for transcript review
-    latest_logs = []
-    if mongo_configured:
-        try:
-            logs_cursor = database.voicecalllogs.find({}).sort("startedAt", -1).limit(5)
-            for log in logs_cursor:
-                latest_logs.append({
-                    "id": str(log.get("_id")),
-                    "callerNumber": log.get("callerNumber"),
-                    "startedAt": log.get("startedAt").isoformat() if log.get("startedAt") else None,
-                    "postCallAnalysis": log.get("postCallAnalysis"),
-                    "timeline": log.get("timeline") or log.get("transcriptTimeline") or log.get("transcript") or [],
-                })
-        except Exception as e:
-            logger.error(f"Error querying logs in health check: {e}")
-            latest_logs = [{"error": str(e)}]
-
-    # Fetch menu for diagnostics
-    menu_summary = "Not fetched"
-    menu_success = False
-    menu_error = None
-    try:
-        menu_res = await pos_tools.get_full_menu()
-        menu_success = menu_res.get("success", False)
-        menu_summary = menu_res.get("menu_summary", "None")
-        menu_error = menu_res.get("error", None)
-        logger.info(f"Health check menu fetch success: {menu_success}, summary length: {len(menu_summary)}, error: {menu_error}")
-    except Exception as e:
-        logger.error(f"Error fetching menu in health check: {e}")
-        menu_error = str(e)
-            
     return {
         "ok": True,
         "mongoConfigured": mongo_configured,
         "database": database_name,
         "activeProfile": active_profile,
-        "settings": db_settings,
-        "geminiModels": gemini_models,
-        "latestLogs": latest_logs,
-        "menu": {
-            "success": menu_success,
-            "summary": menu_summary,
-            "error": menu_error
-        }
     }
 
 @app.post("/incoming-call")
