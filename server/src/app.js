@@ -53,6 +53,9 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use((req, res, next) => {
   req.secret = env.cookieSecret || 'dev_cookie_secret';
+  if (req.cookies && !req.signedCookies) {
+    req.signedCookies = cookieParser.signedCookies(req.cookies, req.secret);
+  }
   next();
 });
 app.use(cookieParser(env.cookieSecret || 'dev_cookie_secret'));
