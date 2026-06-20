@@ -193,28 +193,16 @@ async def health(request: Request):
     database_name = database.name if mongo_configured else None
     
     active_profile = None
-    bhuna_balti_items = []
+    collections_info = {}
     if mongo_configured:
         try:
             tenant = database.tenants.find_one({"isActive": True})
             if tenant:
                 active_profile = tenant.get("businessName")
                 
-            # Query db menuitems directly
-            items = list(database.menuitems.find({
-                "name": {"$regex": "(bhuna|balti)", "$options": "i"}
-            }))
-            for item in items:
-                bhuna_balti_items.append({
-                    "id": str(item.get("_id")),
-                    "name": item.get("name"),
-                    "category": str(item.get("category")),
-                    "basePricePence": item.get("basePricePence"),
-                    "isAvailable": item.get("isAvailable"),
-                    "holdStatus": item.get("holdStatus"),
-                    "publishStatus": item.get("publishStatus"),
-                    "channels": item.get("channels"),
-                })
+            cols = database.list_collection_names()
+            for col in cols:
+                collections_info[col] = database[col].count_documents({})
         except Exception as e:
             logger.error(f"Error querying active tenant profile: {e}")
             
@@ -223,8 +211,9 @@ async def health(request: Request):
         "mongoConfigured": mongo_configured,
         "database": database_name,
         "activeProfile": active_profile,
-        "bhunaBaltiItems": bhuna_balti_items,
+        "collections": collections_info,
     }
+
 
 
 
