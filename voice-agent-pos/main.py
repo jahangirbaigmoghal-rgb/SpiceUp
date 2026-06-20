@@ -236,6 +236,23 @@ async def health(request: Request):
             logger.error(f"Error listing models in health check: {e}")
             gemini_models = [{"error": str(e)}]
 
+    # Fetch latest call logs for transcript review
+    latest_logs = []
+    if mongo_configured:
+        try:
+            logs_cursor = database.voicecalllogs.find({}).sort("createdAt", -1).limit(5)
+            for log in logs_cursor:
+                latest_logs.append({
+                    "id": str(log.get("_id")),
+                    "callerNumber": log.get("callerNumber"),
+                    "createdAt": log.get("createdAt").isoformat() if log.get("createdAt") else None,
+                    "postCallAnalysis": log.get("postCallAnalysis"),
+                    "timeline": log.get("timeline") or log.get("transcriptTimeline") or log.get("transcript") or [],
+                })
+        except Exception as e:
+            logger.error(f"Error querying logs in health check: {e}")
+            latest_logs = [{"error": str(e)}]
+
     # Fetch menu for diagnostics
     menu_summary = "Not fetched"
     menu_success = False
@@ -257,6 +274,7 @@ async def health(request: Request):
         "activeProfile": active_profile,
         "settings": db_settings,
         "geminiModels": gemini_models,
+        "latestLogs": latest_logs,
         "menu": {
             "success": menu_success,
             "summary": menu_summary,
