@@ -22,6 +22,7 @@ class Config:
     port: int
     enable_recording: bool
     recording_consent_message: str
+    barge_in_enabled: bool = True
     s3_bucket_name: str | None = None
     aws_access_key_id: str | None = None
     aws_secret_access_key: str | None = None
@@ -52,11 +53,12 @@ class Config:
             raise ValueError("MONGODB_URI environment variable is required")
 
         gemini_model = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-live-preview")
-        gemini_voice = os.getenv("GEMINI_VOICE", "Charon")
+        gemini_voice = os.getenv("GEMINI_VOICE", "Aoede")
         twilio_phone_number = os.getenv("TWILIO_PHONE_NUMBER", "+441782288662")
         backend_url = os.getenv("BACKEND_URL", "http://localhost:5001").rstrip("/")
         restaurant_name = os.getenv("RESTAURANT_NAME", "Rupeyal Express")
         restaurant_phone = os.getenv("RESTAURANT_PHONE", "+441782288662")
+        barge_in_enabled = os.getenv("BARGE_IN_ENABLED", "True").lower() in ("true", "1", "yes")
         
         host = os.getenv("HOST", "0.0.0.0")
         try:
@@ -91,6 +93,7 @@ class Config:
             port=port,
             enable_recording=enable_recording,
             recording_consent_message=recording_consent_message,
+            barge_in_enabled=barge_in_enabled,
             s3_bucket_name=s3_bucket_name,
             aws_access_key_id=aws_access_key_id,
             aws_secret_access_key=aws_secret_access_key

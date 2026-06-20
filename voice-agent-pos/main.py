@@ -332,6 +332,20 @@ async def media_stream(websocket: WebSocket):
                 # Check if restaurant is closed to handle pre-orders
                 is_closed = check_outside_operating_hours(settings)
                 
+                # Resolve active model, voice and barge-in settings from database
+                db_model = settings.get("voiceAgentModel")
+                db_voice = settings.get("voiceAgentVoice")
+                db_barge_in = settings.get("voiceAgentBargeInEnabled")
+                
+                from dataclasses import replace
+                call_config = config
+                if db_model:
+                    call_config = replace(call_config, gemini_model=db_model)
+                if db_voice:
+                    call_config = replace(call_config, gemini_voice=db_voice)
+                if db_barge_in is not None:
+                    call_config = replace(call_config, barge_in_enabled=bool(db_barge_in))
+                
                 # Build system prompt dynamically
                 system_prompt = build_system_prompt(
                     restaurant_name=store_name,
@@ -340,7 +354,8 @@ async def media_stream(websocket: WebSocket):
                     operating_hours_text=operating_hours_text,
                     delivery_time_mins=delivery_time,
                     collection_time_mins=collection_time,
-                    caller_history_context=caller_history
+                    caller_history_context=caller_history,
+                    voice_name=call_config.gemini_voice
                 )
                 
                 if is_closed:
@@ -360,7 +375,7 @@ async def media_stream(websocket: WebSocket):
                     call_sid=call_sid,
                     caller_number=caller_number,
                     system_prompt=system_prompt,
-                    config=config,
+                    config=call_config,
                     db=database
                 )
                 await bridge.start()

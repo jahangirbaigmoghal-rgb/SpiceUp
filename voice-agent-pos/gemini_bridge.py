@@ -379,18 +379,21 @@ class GeminiBridge:
 
                     # 2. Handle Interruption (Barge-in)
                     if response.server_content is not None and response.server_content.interrupted:
-                        logger.info("Barge-in: clearing outbound queue and Twilio audio buffer.")
-                        while not self.outbound_queue.empty():
-                            try:
-                                self.outbound_queue.get_nowait()
-                                self.outbound_queue.task_done()
-                            except Exception:
-                                break
-                        # Send clear buffer to Twilio
-                        await self.twilio_ws.send_text(json.dumps({
-                            "event": "clear",
-                            "streamSid": self.stream_sid
-                        }))
+                        if self.config.barge_in_enabled:
+                            logger.info("Barge-in: clearing outbound queue and Twilio audio buffer.")
+                            while not self.outbound_queue.empty():
+                                try:
+                                    self.outbound_queue.get_nowait()
+                                    self.outbound_queue.task_done()
+                                except Exception:
+                                    break
+                            # Send clear buffer to Twilio
+                            await self.twilio_ws.send_text(json.dumps({
+                                "event": "clear",
+                                "streamSid": self.stream_sid
+                            }))
+                        else:
+                            logger.info("Barge-in detected but ignored because barge_in_enabled is False.")
 
                     # 3. Stream agent audio and process transcript text
                     audio_received = False
