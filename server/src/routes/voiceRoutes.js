@@ -28,18 +28,6 @@ export const voiceRoutes = Router();
 // Public debug route for diagnostics
 voiceRoutes.get('/debug-calls', getDebugCalls);
 
-voiceRoutes.get('/fix-model-temp', async (req, res) => {
-  try {
-    const mongoose = (await import('mongoose')).default;
-    const db = mongoose.connection.db;
-    const resultSettings = await db.collection('settings').updateMany({}, { $set: { voiceAgentModel: 'gemini-2.0-flash-exp' } });
-    const resultTenants = await db.collection('tenants').updateMany({}, { $set: { voiceAgentModel: 'gemini-2.0-flash-exp' } });
-    res.json({ success: true, resultSettings, resultTenants });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // Apply the voice agent API key check to all internal voice routes
 voiceRoutes.use(requireVoiceAgentKey);
 
