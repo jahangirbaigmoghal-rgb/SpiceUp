@@ -8,7 +8,7 @@ const COOKIE_OPTIONS = {
   httpOnly: true,
   secure: env.isProduction,
   signed: true,
-  sameSite: 'lax',
+  sameSite: env.isProduction ? 'none' : 'lax',
   maxAge: 8 * 60 * 60 * 1000, // 8 hours
 };
 
