@@ -228,10 +228,11 @@ async def health(request: Request):
         "activeProfile": active_profile,
         "menuOk": menu_ok,
         "menuError": menu_err,
-        "menuSummarySnippet": menu_summary[:800] if menu_summary else None,
+        "menuSummarySnippet": menu_summary[:10000] if menu_summary else None,
         "latestCalls": latest_calls,
         "backendUrl": pos_tools.BACKEND_URL
     }
+
 
 
 
