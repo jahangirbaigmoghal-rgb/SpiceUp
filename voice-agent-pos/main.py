@@ -233,37 +233,26 @@ async def db_debug(request: Request):
         return {"error": "MongoDB is not configured"}
         
     try:
+        from bson import json_util
+        
         # Find raw menu items
         raw_items = list(database.menuitems.find({}).limit(5))
-        serialized_raw = []
-        for item in raw_items:
-            # Convert ObjectId to string for JSON serialization
-            item["_id"] = str(item["_id"])
-            if "category" in item:
-                item["category"] = str(item["category"])
-            if "tenant" in item:
-                item["tenant"] = str(item["tenant"])
-            serialized_raw.append(item)
-            
         # Find items with bhuna or balti in name
         match_items = list(database.menuitems.find({"name": {"$regex": "(bhuna|balti)", "$options": "i"}}))
-        serialized_match = []
-        for item in match_items:
-            item["_id"] = str(item["_id"])
-            if "category" in item:
-                item["category"] = str(item["category"])
-            if "tenant" in item:
-                item["tenant"] = str(item["tenant"])
-            serialized_match.append(item)
-            
+        
+        # Safely serialize using bson json_util
+        raw_serialized = json.loads(json_util.dumps(raw_items))
+        match_serialized = json.loads(json_util.dumps(match_items))
+        
         return {
             "database": database.name,
             "collection_names": database.list_collection_names(),
-            "first_5_items": serialized_raw,
-            "bhuna_balti_items": serialized_match
+            "first_5_items": raw_serialized,
+            "bhuna_balti_items": match_serialized
         }
     except Exception as e:
         return {"error": str(e)}
+
 
 @app.post("/incoming-call")
 async def incoming_call(request: Request):
