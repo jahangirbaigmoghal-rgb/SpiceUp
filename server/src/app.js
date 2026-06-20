@@ -66,9 +66,6 @@ app.get('/api/health', (_req, res) => res.json({
   service: 'takeaway-pos-pro-server',
   version: '1.0.0',
   timestamp: new Date().toISOString(),
-  cookieSecretType: typeof env.cookieSecret,
-  cookieSecretLength: env.cookieSecret?.length,
-  cookieSecretValue: env.cookieSecret ? env.cookieSecret.substring(0, 3) + '...' : null,
 }));
 
 // ─── Tenant Middleware ───────────────────────────────────────────────────────
