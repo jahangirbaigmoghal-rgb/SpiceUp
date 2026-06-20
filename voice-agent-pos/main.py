@@ -200,11 +200,30 @@ async def health(request: Request):
         except Exception as e:
             logger.error(f"Error querying active tenant profile: {e}")
             
+    # Fetch menu for diagnostics
+    menu_summary = "Not fetched"
+    menu_success = False
+    menu_error = None
+    try:
+        menu_res = await pos_tools.get_full_menu()
+        menu_success = menu_res.get("success", False)
+        menu_summary = menu_res.get("menu_summary", "None")
+        menu_error = menu_res.get("error", None)
+        logger.info(f"Health check menu fetch success: {menu_success}, summary length: {len(menu_summary)}, error: {menu_error}")
+    except Exception as e:
+        logger.error(f"Error fetching menu in health check: {e}")
+        menu_error = str(e)
+            
     return {
         "ok": True,
         "mongoConfigured": mongo_configured,
         "database": database_name,
         "activeProfile": active_profile,
+        "menu": {
+            "success": menu_success,
+            "summary": menu_summary,
+            "error": menu_error
+        }
     }
 
 @app.post("/incoming-call")
