@@ -193,32 +193,49 @@ async def health(request: Request):
     database_name = database.name if mongo_configured else None
     
     active_profile = None
-    item_count = 0
-    first_item_name = None
-    db_error = None
+    bhuna_items_diag = []
+    categories_diag = []
+    
     if mongo_configured:
         try:
             tenant = database.tenants.find_one({"isActive": True})
             if tenant:
                 active_profile = tenant.get("businessName")
                 
-            item_count = database.menuitems.count_documents({})
-            first_item = database.menuitems.find_one({})
-            if first_item:
-                first_item_name = first_item.get("name")
+            # Query all categories
+            cats = list(database.categories.find({}))
+            for c in cats:
+                categories_diag.append({
+                    "id": str(c.get("_id")),
+                    "name": c.get("name"),
+                    "isActive": c.get("isActive"),
+                    "channels": c.get("channels"),
+                    "parent": str(c.get("parent")) if c.get("parent") else None,
+                })
+                
+            # Query menuitems with bhuna in name
+            items = list(database.menuitems.find({"name": {"$regex": "bhuna", "$options": "i"}}))
+            for item in items:
+                bhuna_items_diag.append({
+                    "id": str(item.get("_id")),
+                    "name": item.get("name"),
+                    "isAvailable": item.get("isAvailable"),
+                    "publishStatus": item.get("publishStatus"),
+                    "channels": item.get("channels"),
+                    "category": str(item.get("category")),
+                })
         except Exception as e:
             logger.error(f"Error querying active tenant profile: {e}")
-            db_error = str(e)
             
     return {
         "ok": True,
         "mongoConfigured": mongo_configured,
         "database": database_name,
         "activeProfile": active_profile,
-        "itemCount": item_count,
-        "firstItemName": first_item_name,
-        "dbError": db_error,
+        "categories": categories_diag,
+        "bhunaItemsDiag": bhuna_items_diag,
     }
+
 
 
 @app.get("/db-debug")
