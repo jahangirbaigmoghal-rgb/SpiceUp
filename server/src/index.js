@@ -8,8 +8,9 @@ import { env } from './config/env.js';
 async function bootstrap() {
   try {
     // Connect to databases
+    console.log('DEBUG STARTUP - env.dbName:', env.dbName, 'env.mongoUri:', env.mongoUri);
     await connectDb();
-    const { seedIfEmpty, repairDefaultUserPins, ensureAdminExists } = await import('./seed.js');
+    const { seedIfEmpty, repairDefaultUserPins, ensureAdminExists } = await import('./seed_takeawaypos.js');
     await seedIfEmpty();
     await repairDefaultUserPins();  // Fix any corrupted PINs from the old double-hash bug
     await ensureAdminExists();

@@ -149,8 +149,8 @@ async def lifespan(app: FastAPI):
             logger.warning(f"Could not get default database, trying to list: {db_err}")
             db_name = None
             
-        # Force "test" database to align with the active Vercel production backend database
-        db_name = "test"
+        # Force the database name from config (defaults to "Takeawaypos")
+        db_name = config.mongodb_db_name
                 
         db = mongo_client[db_name]
         logger.info(f"MongoDB connection established on database: {db.name}")

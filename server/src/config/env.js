@@ -19,6 +19,7 @@ export const env = {
   // Database
   mongoUri: process.env.MONGODB_URI ?? '',
   useMemoryDb: process.env.USE_MEMORY_DB === 'true' || !process.env.MONGODB_URI,
+  dbName: process.env.MONGODB_DB_NAME || 'takeawaypos',
 
   // Auth
   jwtSecret: process.env.JWT_SECRET ?? 'dev_secret_change_in_production',

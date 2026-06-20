@@ -16,6 +16,7 @@ class Config:
     backend_url: str
     voice_agent_api_key: str
     mongodb_uri: str
+    mongodb_db_name: str
     restaurant_name: str
     restaurant_phone: str
     host: str
@@ -52,6 +53,8 @@ class Config:
         if not mongodb_uri:
             raise ValueError("MONGODB_URI environment variable is required")
 
+        mongodb_db_name = os.getenv("MONGODB_DB_NAME", "takeawaypos")
+
         gemini_model = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-live-preview")
         gemini_voice = os.getenv("GEMINI_VOICE", "Aoede")
         twilio_phone_number = os.getenv("TWILIO_PHONE_NUMBER", "+441782288662")
@@ -87,6 +90,7 @@ class Config:
             backend_url=backend_url,
             voice_agent_api_key=voice_agent_api_key,
             mongodb_uri=mongodb_uri,
+            mongodb_db_name=mongodb_db_name,
             restaurant_name=restaurant_name,
             restaurant_phone=restaurant_phone,
             host=host,
