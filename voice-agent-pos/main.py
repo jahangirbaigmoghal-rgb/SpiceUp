@@ -193,7 +193,7 @@ async def health(request: Request):
     database_name = database.name if mongo_configured else None
     
     active_profile = None
-    collections_info = {}
+    bhuna_items = []
     db_error = None
     if mongo_configured:
         try:
@@ -201,9 +201,39 @@ async def health(request: Request):
             if tenant:
                 active_profile = tenant.get("businessName")
                 
-            cols = database.list_collection_names()
-            for col in cols:
-                collections_info[col] = database[col].count_documents({})
+            # Query direct bhuna items
+            items = list(database.menuitems.find({
+                "name": {"$regex": "bhuna", "$options": "i"}
+            }))
+            for item in items:
+                # Resolve category if possible
+                cat_doc = None
+                if item.get("category"):
+                    cat_doc = database.categories.find_one({"_id": item.get("category")})
+                    if cat_doc and cat_doc.get("parent"):
+                        cat_doc["parent_doc"] = database.categories.find_one({"_id": cat_doc.get("parent")})
+                
+                bhuna_items.append({
+                    "id": str(item.get("_id")),
+                    "name": item.get("name"),
+                    "basePricePence": item.get("basePricePence"),
+                    "isAvailable": item.get("isAvailable"),
+                    "holdStatus": item.get("holdStatus"),
+                    "publishStatus": item.get("publishStatus"),
+                    "channels": item.get("channels"),
+                    "availabilitySchedule": str(item.get("availabilitySchedule")),
+                    "category": {
+                        "id": str(cat_doc.get("_id")) if cat_doc else None,
+                        "name": cat_doc.get("name") if cat_doc else None,
+                        "isActive": cat_doc.get("isActive") if cat_doc else None,
+                        "channels": cat_doc.get("channels") if cat_doc else None,
+                        "parent": {
+                            "name": cat_doc["parent_doc"].get("name") if cat_doc and "parent_doc" in cat_doc and cat_doc["parent_doc"] else None,
+                            "isActive": cat_doc["parent_doc"].get("isActive") if cat_doc and "parent_doc" in cat_doc and cat_doc["parent_doc"] else None,
+                            "channels": cat_doc["parent_doc"].get("channels") if cat_doc and "parent_doc" in cat_doc and cat_doc["parent_doc"] else None,
+                        } if cat_doc else None
+                    } if cat_doc else None
+                })
         except Exception as e:
             logger.error(f"Error querying active tenant profile: {e}")
             db_error = str(e)
@@ -213,9 +243,10 @@ async def health(request: Request):
         "mongoConfigured": mongo_configured,
         "database": database_name,
         "activeProfile": active_profile,
-        "collections": collections_info,
+        "bhunaItems": bhuna_items,
         "dbError": db_error,
     }
+
 
 
 
