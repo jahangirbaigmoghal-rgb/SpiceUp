@@ -193,45 +193,21 @@ async def health(request: Request):
     database_name = database.name if mongo_configured else None
     
     active_profile = None
-    latest_calls = []
     if mongo_configured:
         try:
             tenant = database.tenants.find_one({"isActive": True})
             if tenant:
                 active_profile = tenant.get("businessName")
-                
-            # Retrieve last 5 call recordings
-            calls = list(database.callRecordings.find({}).sort("startedAt", -1).limit(5))
-            for c in calls:
-                latest_calls.append({
-                    "callSid": c.get("callSid"),
-                    "callerNumber": c.get("callerNumber"),
-                    "startedAt": str(c.get("startedAt")),
-                    "userTranscript": c.get("userTranscript"),
-                    "agentTranscript": c.get("agentTranscript"),
-                    "summary": c.get("summary"),
-                    "postCallAnalysis": str(c.get("postCallAnalysis")) if "postCallAnalysis" in c else None,
-                    "analysis": str(c.get("analysis")) if "analysis" in c else None,
-                })
         except Exception as e:
-            logger.error(f"Error querying active tenant profile or calls: {e}")
+            logger.error(f"Error querying active tenant profile: {e}")
             
-    menu_res = await pos_tools.get_full_menu()
-    menu_ok = menu_res.get("success", False)
-    menu_err = menu_res.get("error", None)
-    menu_summary = menu_res.get("menu_summary", "")
-    
     return {
         "ok": True,
         "mongoConfigured": mongo_configured,
         "database": database_name,
         "activeProfile": active_profile,
-        "menuOk": menu_ok,
-        "menuError": menu_err,
-        "menuSummarySnippet": menu_summary[:10000] if menu_summary else None,
-        "latestCalls": latest_calls,
-        "backendUrl": pos_tools.BACKEND_URL
     }
+
 
 
 
