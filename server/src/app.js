@@ -86,8 +86,15 @@ app.get('/api/debug-db-temp', async (req, res) => {
     // Find first 5 menu items
     const first5 = await db.collection('menuitems').find({}).limit(5).toArray();
     
+    // Mask URI
+    let maskedUri = 'not_set';
+    if (process.env.MONGODB_URI) {
+      maskedUri = process.env.MONGODB_URI.replace(/\/\/([^:]+):([^@]+)@/, '//xxxx:xxxx@');
+    }
+    
     res.json({
       database: mongoose.connection.name,
+      mongoUri: maskedUri,
       collections: colNames,
       bhunaBaltiItems: bhunaBalti,
       first5Items: first5,
