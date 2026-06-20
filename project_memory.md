@@ -59,23 +59,23 @@ Always refer to the Final Review Implementation Plan for alignment, feature requ
 ### AI Voice Agent "closed", unable to pick menus, or empty call recordings/SMS
 **Issue**: The voice agent repeated that the restaurant was closed (or used fallback generic prompts instead of the customized restaurant prompt), placed voice orders did not show up in the POS/Admin dashboard, SMS receipts were simulated instead of real, and call recordings/transcripts were missing from the call logs.
 **Root Cause**:
-1. **Database Mismatch**: The Render voice agent's environment variable `MONGODB_URI` was incorrectly pointing to `/test` instead of `/takeawaypos`. Because of this, it connected to an empty/incorrect database where no tenant or publish settings existed, resulting in empty collections and no active profile (`activeProfile: null`).
-2. **Missing Active Tenant Flag**: Even when pointing to `/takeawaypos`, the tenant document (`_id: 6a26d6d9f84b948cbb424885`) had its `isActive` field set to `None`/missing. The voice agent queries `db.tenants.find_one({"isActive": True})` to load the profile, which failed when the flag was missing.
-3. **Missing Twilio credentials on Vercel**: The Vercel projects (`take-away-pos` and `take-away-pos-pos`) lacked Twilio credentials (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_PHONE_NUMBER`). Because of this, the Node.js backend fell back to simulated SMS logging (`⚠️ SMS Bill (Simulated)...`) rather than sending real SMS messages, and call recordings could not be queried or displayed on the call logs dashboard.
-4. **Local Network Port Block**: Attempts to update or inspect the MongoDB Atlas cluster from the developer's local machine resulted in `No replica set members found yet` (ReplicaSetNoPrimary) due to network-level blocking of outgoing port 27017.
+1. **Database Mismatch**: The Render voice agent's environment variable `MONGODB_URI` was pointing to `/takeawaypos` or `/test` mismatch. Crucially, the Vercel backend deployment was running an older version (due to Vercel's daily deployment limits blocking updates) that connects to the default `"test"` database of the pathless MongoDB Atlas URI. Because Vercel and the POS frontend were operating on `"test"` while Render was pointing to `"takeawaypos"`, the two backends were completely split. Render connected to an empty database (no menus, no active tenant, `activeProfile: null`), while Vercel stored all updates in `"test"`.
+2. **Missing Active Tenant Flag**: The tenant document had its `isActive` flag missing or set to false in the database in use.
+3. **Missing Twilio credentials on Vercel**: The Vercel projects (`take-away-pos` and `take-away-pos-pos`) lacked Twilio credentials. Because of this, the Node.js backend fell back to simulated SMS logging rather than sending real SMS messages, and call recordings could not be queried or displayed on the call logs dashboard.
+4. **Local Network Port Block**: Developer local network blocked outbound port 27017, preventing direct connection to MongoDB Atlas for diagnostics.
 **Fix Applied**:
-1. **Updated Render DB Configuration**: Corrected `MONGODB_URI` environment variable for service `TakeAwayPOS` (`srv-d8q1p4j6sc1c73b09av0`) on Render to point to `/takeawaypos` and redeployed.
-2. **Updated Vercel Twilio Configuration**: Added `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_PHONE_NUMBER` env vars to Vercel projects and redeployed.
+1. **Database Connection Alignment**: Forced the Render voice agent database connection in `voice-agent-pos/main.py` to always connect to `"test"`. Since Vercel's active database is `"test"`, this forces both backends to connect to the exact same database. This resolved the data split, allowing Render to load menus/settings and save logs/orders directly to the same database.
+2. **Updated Vercel Twilio Configuration**: Added `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_PHONE_NUMBER` env vars to Vercel projects.
 3. **Cloud-Based Database Activation Route**: Created a temporary `/api/activate-tenant-temp` GET route in the voice-agent FastAPI (`main.py`) which triggers `db.tenants.update_many({}, {"$set": {"isActive": True}})` directly in the cloud container (bypassing local port 27017 blocks), committed/pushed it to main branch, and triggered it.
 4. **Clean-up**: Removed the temporary database activation route after confirming the database update succeeded.
 **Verification**:
-- Check that `https://takeawaypos.onrender.com/health` returns `"ok": true`, `"mongoConfigured": true`, `"database": "takeawaypos"`, and `"activeProfile"` successfully matches the business name (e.g. `Jahangir`).
-- Verify that calling the Twilio number places the order, sends the real Twilio SMS, and saves call recordings under `takeawaypos` database GridFS.
+- Check that `https://takeawaypos.onrender.com/health` returns `"ok": true`, `"mongoConfigured": true`, `"database": "test"`, and `"activeProfile"` successfully matches `"Rupeyal Express"`.
+- Verify that calling the Twilio number places the order, sends the real Twilio SMS, and saves call recordings under the `"test"` database.
 **Next-Time Checklist**:
 1. Run a health check query against `https://takeawaypos.onrender.com/health`. If `"activeProfile"` is `null`, the agent cannot load menus or custom settings.
-2. If `"database"` is not `"takeawaypos"`, check Render's environment variable `MONGODB_URI`.
-3. If `"database"` is correct but `"activeProfile"` is `null`, check if the tenant document has `isActive: true`. If local port 27017 is blocked, add a temporary update endpoint in the application code, deploy it, and trigger it via browser.
-4. If SMS is not sent or call logs are missing, check if `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_PHONE_NUMBER` are set in the Vercel project environment variables.
+2. If `"database"` is not `"test"`, verify the database override in `main.py`.
+3. If `"database"` is correct but `"activeProfile"` is `null`, check if the tenant document has `isActive: true`.
+4. If SMS is not sent or call logs are missing, check if `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_PHONE_NUMBER` are set in Vercel's project env variables.
 
 ### AI Voice Agent Call Logs and Recordings Missing from POS Dashboard
 **Issue**: Although orders placed via the AI Voice Agent were updated on the POS and SMS receipts were sent successfully, the "Recent Voice Calls" table in the AI Voice Agent Control dashboard showed "No summary captured" and did not display the recording audio player.
