@@ -127,4 +127,16 @@ Always refer to the Final Review Implementation Plan for alignment, feature requ
 1. Run a POST request directly to the live backend serverless function (e.g. `POST /api/auth/login-pin` with `{"pin": "1111", "terminalId": "MAIN"}`). If it succeeds with `200 OK` and returns the authenticated user object, the signed cookies are working.
 2. If it throws `cookieParser("secret") required for signed cookies`, ensure the custom middleware that explicitly sets `req.secret` is registered globally in `server/src/app.js` before `cookieParser`.
 
+### AI Voice Agent Connection Failure/Silence due to Sunsetted/Deprecated Gemini Models
+**Issue**: The customer experiences dead silence after the call connects, with no audio response from the AI Voice Agent.
+**Root Cause**: The default Gemini models configured in the project (`gemini-2.0-flash-exp` and `gemini-2.0-flash-live-001`) have been sunsetted/deprecated by Google for the live bidirectional API, causing the WebSocket bridge connection to fail with a 1008 protocol error on connection start.
+**Fixes Applied**:
+1. Updated the default Gemini Live model name to `gemini-3.1-flash-live-preview` across all configurations: settings schema (`Setting.js`), tenant schema (`Tenant.js`), settings controller (`settingsController.js`), voice config module (`config.py`), and `.env.example`.
+2. Created a temporary `/api/voice/fix-model-temp` endpoint in `voiceRoutes.js` that performs a database migration (`updateMany`) on existing documents in the `settings` and `tenants` collections to set `voiceAgentModel` to `gemini-3.1-flash-live-preview`.
+3. Deployed the backend to Vercel, triggered the migration route (`/api/voice/fix-model-temp`) to update the live cloud MongoDB, and successfully removed/cleaned up the temporary route afterward.
+**Verification / Next-Time Checklist**:
+1. Inspect the voice agent backend logs on Render to see if the WebSocket connection completes successfully. If a 1008 error is thrown, the model specified in the database is likely deprecated or unsupported.
+2. Ensure the active database document's `voiceAgentModel` field is updated to the latest supported Live API model (e.g., `gemini-3.1-flash-live-preview`).
+
+
 
