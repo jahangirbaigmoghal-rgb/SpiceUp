@@ -60,6 +60,8 @@ app.use(sanitizeBody);
 // ─── Static Files ────────────────────────────────────────────────────────────
 app.use('/uploads', express.static(path.resolve(__dirname, '../../uploads')));
 
+import mongoose from 'mongoose';
+
 // ─── Health Check ────────────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => res.json({
   ok: true,
@@ -73,10 +75,20 @@ app.get('/api/debug-db-temp', async (req, res) => {
     const db = mongoose.connection.db;
     const collections = await db.listCollections().toArray();
     const colNames = collections.map(c => c.name);
-    const tenants = await db.collection('tenants').find({}).toArray();
+    
+    // Find all bhuna/balti items in database
+    const bhunaBalti = await db.collection('menuitems').find({
+      name: { $regex: /bhuna|balti/i }
+    }).toArray();
+    
+    // Find first 5 menu items
+    const first5 = await db.collection('menuitems').find({}).limit(5).toArray();
+    
     res.json({
+      database: mongoose.connection.name,
       collections: colNames,
-      tenants: tenants,
+      bhunaBaltiItems: bhunaBalti,
+      first5Items: first5,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
