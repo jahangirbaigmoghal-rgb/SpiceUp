@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
+import mongoose from 'mongoose';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { env } from './config/env.js';
@@ -59,8 +60,6 @@ app.use(sanitizeBody);
 
 // ─── Static Files ────────────────────────────────────────────────────────────
 app.use('/uploads', express.static(path.resolve(__dirname, '../../uploads')));
-
-import mongoose from 'mongoose';
 
 // ─── Health Check ────────────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => res.json({
