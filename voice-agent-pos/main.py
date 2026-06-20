@@ -200,6 +200,23 @@ async def health(request: Request):
         except Exception as e:
             logger.error(f"Error querying active tenant profile: {e}")
             
+    # Fetch settings for diagnostics
+    db_settings = {}
+    if mongo_configured:
+        try:
+            settings_doc = database.settings.find_one({})
+            if settings_doc:
+                db_settings = {
+                    "voiceAgentModel": settings_doc.get("voiceAgentModel"),
+                    "voiceAgentVoice": settings_doc.get("voiceAgentVoice"),
+                    "voiceAgentBargeInEnabled": settings_doc.get("voiceAgentBargeInEnabled"),
+                    "storeOpenTime": settings_doc.get("storeOpenTime"),
+                    "storeCloseTime": settings_doc.get("storeCloseTime"),
+                    "storeIsOpen": settings_doc.get("storeIsOpen")
+                }
+        except Exception as e:
+            logger.error(f"Error querying settings in health check: {e}")
+
     # Fetch menu for diagnostics
     menu_summary = "Not fetched"
     menu_success = False
@@ -219,6 +236,7 @@ async def health(request: Request):
         "mongoConfigured": mongo_configured,
         "database": database_name,
         "activeProfile": active_profile,
+        "settings": db_settings,
         "menu": {
             "success": menu_success,
             "summary": menu_summary,
