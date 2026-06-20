@@ -200,8 +200,17 @@ async def health(request: Request):
     database_name = database.name if mongo_configured else None
     
     active_profile = None
+    tenants_list = []
     if mongo_configured:
         try:
+            # Query all tenants to inspect them
+            all_tenants = list(database.tenants.find({}))
+            for t in all_tenants:
+                t_copy = dict(t)
+                if "_id" in t_copy:
+                    t_copy["_id"] = str(t_copy["_id"])
+                tenants_list.append(t_copy)
+                
             tenant = database.tenants.find_one({"isActive": True})
             if tenant:
                 active_profile = tenant.get("businessName")
@@ -213,6 +222,7 @@ async def health(request: Request):
         "mongoConfigured": mongo_configured,
         "database": database_name,
         "activeProfile": active_profile,
+        "tenants": tenants_list,
     }
 
 @app.post("/incoming-call")
