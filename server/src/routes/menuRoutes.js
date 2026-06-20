@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { authenticate, requireManager, requireAdmin } from '../middleware/auth.js';
 import {
-  getDebugDbTemp,
   getCategories,
   createCategory,
   updateCategory,
@@ -54,7 +53,6 @@ import {
 export const menuRoutes = Router();
 
 // ─── Categories ──────────────────────────────────────────────────────────────
-menuRoutes.get('/debug-db-temp', getDebugDbTemp);                      // Temporary Debug
 menuRoutes.get('/categories', getCategories);                          // Public
 menuRoutes.post('/categories', authenticate, requireAdmin, createCategory);
 menuRoutes.put('/categories/:id', authenticate, requireAdmin, updateCategory);

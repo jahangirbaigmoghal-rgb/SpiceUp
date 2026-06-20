@@ -131,30 +131,6 @@ function broadcastMenuChanged(req, entity, action, extra = {}) {
   emitMenuChanged(req.tenantId, { entity, action, ...extra });
 }
 
-// ΓöÇΓöÇΓöÇ Categories ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
-
-export async function getDebugDbTemp(req, res, next) {
-  try {
-    const db = mongoose.connection.db;
-    const collections = await db.listCollections().toArray();
-    const colNames = collections.map(c => c.name);
-    const tenants = await db.collection('tenants').find({}).toArray();
-    const connInfo = {
-      host: mongoose.connection.host,
-      port: mongoose.connection.port,
-      name: mongoose.connection.name,
-      readyState: mongoose.connection.readyState,
-    };
-    res.json({
-      connInfo,
-      collections: colNames,
-      tenants: tenants,
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-}
-
 export async function getCategories(req, res, next) {
   try {
     const channel = normalizeChannel(req.query.channel);
