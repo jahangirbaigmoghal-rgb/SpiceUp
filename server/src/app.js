@@ -68,6 +68,21 @@ app.get('/api/health', (_req, res) => res.json({
   timestamp: new Date().toISOString(),
 }));
 
+app.get('/api/debug-db-temp', async (req, res) => {
+  try {
+    const db = mongoose.connection.db;
+    const collections = await db.listCollections().toArray();
+    const colNames = collections.map(c => c.name);
+    const tenants = await db.collection('tenants').find({}).toArray();
+    res.json({
+      collections: colNames,
+      tenants: tenants,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── Tenant Middleware ───────────────────────────────────────────────────────
 // Applied to all /api routes to set req.tenantId
 app.use('/api', tenantMiddleware);
