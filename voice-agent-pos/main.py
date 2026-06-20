@@ -224,10 +224,10 @@ async def health(request: Request):
         try:
             client = genai.Client(api_key=config.gemini_api_key)
             for m in client.models.list():
-                methods = getattr(m, 'supported_generation_methods', [])
+                methods = [str(x) for x in getattr(m, 'supported_generation_methods', [])]
                 is_live = any("bidiGenerateContent" in method for method in methods)
                 gemini_models.append({
-                    "name": m.name,
+                    "name": str(m.name),
                     "isLive": is_live,
                     "methods": methods
                 })
