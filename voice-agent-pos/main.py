@@ -193,7 +193,8 @@ async def health(request: Request):
     database_name = database.name if mongo_configured else None
     
     active_profile = None
-    sample_items = []
+    item_count = 0
+    first_item_name = None
     db_error = None
     if mongo_configured:
         try:
@@ -201,18 +202,10 @@ async def health(request: Request):
             if tenant:
                 active_profile = tenant.get("businessName")
                 
-            # Query first 5 menu items
-            items = list(database.menuitems.find({}).limit(5))
-            for item in items:
-                sample_items.append({
-                    "id": str(item.get("_id")),
-                    "name": item.get("name"),
-                    "category": str(item.get("category")),
-                    "basePricePence": item.get("basePricePence") or item.get("pricePence"),
-                    "isAvailable": item.get("isAvailable"),
-                    "publishStatus": item.get("publishStatus"),
-                    "channels": item.get("channels"),
-                })
+            item_count = database.menuitems.count_documents({})
+            first_item = database.menuitems.find_one({})
+            if first_item:
+                first_item_name = first_item.get("name")
         except Exception as e:
             logger.error(f"Error querying active tenant profile: {e}")
             db_error = str(e)
@@ -222,9 +215,11 @@ async def health(request: Request):
         "mongoConfigured": mongo_configured,
         "database": database_name,
         "activeProfile": active_profile,
-        "sampleItems": sample_items,
+        "itemCount": item_count,
+        "firstItemName": first_item_name,
         "dbError": db_error,
     }
+
 
 @app.get("/db-debug")
 async def db_debug(request: Request):
