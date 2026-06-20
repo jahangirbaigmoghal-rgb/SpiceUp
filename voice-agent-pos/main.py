@@ -240,12 +240,12 @@ async def health(request: Request):
     latest_logs = []
     if mongo_configured:
         try:
-            logs_cursor = database.voicecalllogs.find({}).sort("createdAt", -1).limit(5)
+            logs_cursor = database.voicecalllogs.find({}).sort("startedAt", -1).limit(5)
             for log in logs_cursor:
                 latest_logs.append({
                     "id": str(log.get("_id")),
                     "callerNumber": log.get("callerNumber"),
-                    "createdAt": log.get("createdAt").isoformat() if log.get("createdAt") else None,
+                    "startedAt": log.get("startedAt").isoformat() if log.get("startedAt") else None,
                     "postCallAnalysis": log.get("postCallAnalysis"),
                     "timeline": log.get("timeline") or log.get("transcriptTimeline") or log.get("transcript") or [],
                 })
