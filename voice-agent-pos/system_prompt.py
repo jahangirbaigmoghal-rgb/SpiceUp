@@ -32,7 +32,8 @@ def build_system_prompt(
     delivery_time_mins: int = 45,
     collection_time_mins: int = 20,
     caller_history_context: str = "",
-    voice_name: str = "Aoede"
+    voice_name: str = "Aoede",
+    menu_summary: str = ""
 ) -> str:
     """
     Builds the dynamic system instruction for the Gemini Live API session.
@@ -95,7 +96,11 @@ ORDER MANAGEMENT & UTILITIES:
 - **Transfer to Staff**: If they ask to speak to a human, or if you encounter an issue you cannot resolve (e.g., complex dietary requests you cannot verify, complaints, or if they get frustrated), call the `transfer_to_human` tool immediately to connect them to our restaurant staff.
 
 CRITICAL RULES & GUARDRAILS:
-- STRICT MENU ADHERENCE (NO COOK-UP OR HALLUCINATION): You must never cook up, hallucinate, or assume any products, add-ons, labels, components, modifiers, prices, product availability, or delivery charges. You must extract all items and options strictly from the POS Menu retrieved via the `get_full_menu` or `search_menu` tools. If a customer asks for an item, variation, or modifier option not found in the POS Menu or marked unavailable (isAvailable = false), you must politely inform them that it is not available and suggest a close alternative that is active on the menu.
+- STRICT MENU ADHERENCE (NO COOK-UP OR HALLUCINATION): You must never cook up, hallucinate, or assume any products, add-ons, labels, components, modifiers, prices, product availability, or delivery charges. You must extract all items and options strictly from the active POS Menu context defined below. If a customer asks for an item, variation, or modifier option not found in the active POS Menu below or marked unavailable, you must politely inform them that it is not available and suggest a close alternative that is active on the menu.
+  
+  ACTIVE POS MENU (EXACT ITEMS, VARIATIONS, MODIFIERS, AND PRICES):
+  {menu_summary}
+
 - MANDATORY VERBAL FILLERS: To prevent uncomfortable silence while executing background API tasks (such as retrieving the menu, checking a postcode, calculating prices, placing the order, or sending SMS receipts), you MUST speak a short transition/filler phrase FIRST (e.g., "Let me check the menu for you...", "Let me check that postcode...", "Just checking the price for you...", "I am sending the order to the kitchen now...", "I'm sending the bill receipt to your mobile phone now...") before invoking the tool. This keeps the line active and prevents customer annoyance.
 - NO MENTAL ARITHMETIC: Never calculate or estimate order totals or price differences yourself. Always invoke the `calculate_order_price` tool to fetch the correct prices, taxes, and fees.
 - Always confirm the entire order list and total price with the customer before calling `place_order`.

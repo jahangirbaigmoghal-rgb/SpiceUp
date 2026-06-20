@@ -338,6 +338,10 @@ async def media_stream(websocket: WebSocket):
                 if db_barge_in is not None:
                     call_config = replace(call_config, barge_in_enabled=bool(db_barge_in))
                 
+                # Fetch full menu to inject into system instruction context
+                menu_res = await pos_tools.get_full_menu()
+                menu_summary = menu_res.get("menu_summary", "Active POS menu is currently unavailable.")
+
                 # Build system prompt dynamically
                 system_prompt = build_system_prompt(
                     restaurant_name=store_name,
@@ -347,7 +351,8 @@ async def media_stream(websocket: WebSocket):
                     delivery_time_mins=delivery_time,
                     collection_time_mins=collection_time,
                     caller_history_context=caller_history,
-                    voice_name=call_config.gemini_voice
+                    voice_name=call_config.gemini_voice,
+                    menu_summary=menu_summary
                 )
                 
                 if is_closed:
