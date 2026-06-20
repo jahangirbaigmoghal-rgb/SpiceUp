@@ -524,7 +524,7 @@ class GeminiBridge:
         
         try:
             if name == "get_full_menu":
-                res_payload = await pos_tools.get_full_menu()
+                res_payload = await pos_tools.get_full_menu(self.db)
             elif name == "search_menu":
                 res_payload = await pos_tools.search_menu(args.get("query", ""))
             elif name == "get_item_details":

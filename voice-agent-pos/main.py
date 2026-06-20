@@ -193,48 +193,41 @@ async def health(request: Request):
     database_name = database.name if mongo_configured else None
     
     active_profile = None
-    bhuna_items_diag = []
-    categories_diag = []
-    
+    balti_doc = None
+    db_error = None
     if mongo_configured:
         try:
             tenant = database.tenants.find_one({"isActive": True})
             if tenant:
                 active_profile = tenant.get("businessName")
                 
-            # Query all categories
-            cats = list(database.categories.find({}))
-            for c in cats:
-                categories_diag.append({
-                    "id": str(c.get("_id")),
-                    "name": c.get("name"),
-                    "isActive": c.get("isActive"),
-                    "channels": c.get("channels"),
-                    "parent": str(c.get("parent")) if c.get("parent") else None,
-                })
-                
-            # Query menuitems with bhuna in name
-            items = list(database.menuitems.find({"name": {"$regex": "bhuna", "$options": "i"}}))
-            for item in items:
-                bhuna_items_diag.append({
-                    "id": str(item.get("_id")),
-                    "name": item.get("name"),
-                    "isAvailable": item.get("isAvailable"),
-                    "publishStatus": item.get("publishStatus"),
-                    "channels": item.get("channels"),
-                    "category": str(item.get("category")),
-                })
+            # Query MEAT BALTI
+            item = database.menuitems.find_one({"name": {"$regex": "meat balti", "$options": "i"}})
+            if item:
+                # Convert ObjectId fields to string
+                item["_id"] = str(item["_id"])
+                if "category" in item:
+                    item["category"] = str(item["category"])
+                if "tenant" in item:
+                    item["tenant"] = str(item["tenant"])
+                if "variations" in item:
+                    item["variations"] = [str(v) for v in item["variations"]]
+                if "modifierGroups" in item:
+                    item["modifierGroups"] = [str(m) for m in item["modifierGroups"]]
+                balti_doc = item
         except Exception as e:
             logger.error(f"Error querying active tenant profile: {e}")
+            db_error = str(e)
             
     return {
         "ok": True,
         "mongoConfigured": mongo_configured,
         "database": database_name,
         "activeProfile": active_profile,
-        "categories": categories_diag,
-        "bhunaItemsDiag": bhuna_items_diag,
+        "baltiDoc": balti_doc,
+        "dbError": db_error,
     }
+
 
 
 
@@ -398,7 +391,7 @@ async def media_stream(websocket: WebSocket):
                     call_config = replace(call_config, barge_in_enabled=bool(db_barge_in))
                 
                 # Fetch full menu to inject into system instruction context
-                menu_res = await pos_tools.get_full_menu()
+                menu_res = await pos_tools.get_full_menu(database)
                 menu_summary = menu_res.get("menu_summary", "Active POS menu is currently unavailable.")
 
                 # Build system prompt dynamically
