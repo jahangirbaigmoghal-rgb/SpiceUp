@@ -7,8 +7,9 @@ let memoryServer;
 export async function connectDb() {
   const uri = env.useMemoryDb ? await getMemoryUri() : env.mongoUri;
   mongoose.set('strictQuery', true);
-  await mongoose.connect(uri);
-  console.log(`✅ MongoDB connected: ${env.useMemoryDb ? 'in-memory (dev)' : uri.split('@').pop()}`);
+  const options = env.useMemoryDb ? {} : { dbName: 'takeawaypos' };
+  await mongoose.connect(uri, options);
+  console.log(`✅ MongoDB connected: ${env.useMemoryDb ? 'in-memory (dev)' : uri.split('@').pop()} [DB: takeawaypos]`);
 }
 
 async function getMemoryUri() {
