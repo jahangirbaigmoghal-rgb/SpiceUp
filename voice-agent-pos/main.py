@@ -149,16 +149,8 @@ async def lifespan(app: FastAPI):
             logger.warning(f"Could not get default database, trying to list: {db_err}")
             db_name = None
             
-        # If db_name is None, try to list and fallback to "test"
-        if not db_name:
-            available_dbs = mongo_client.list_database_names()
-            logger.info(f"Available databases in cluster: {available_dbs}")
-            if "test" in available_dbs:
-                db_name = "test"
-            elif "rupeyal" in available_dbs:
-                db_name = "rupeyal"
-            else:
-                db_name = "test" # Fallback
+        # Force "test" database to align with the active Vercel production backend database
+        db_name = "test"
                 
         db = mongo_client[db_name]
         logger.info(f"MongoDB connection established on database: {db.name}")

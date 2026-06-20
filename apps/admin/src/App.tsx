@@ -775,6 +775,9 @@ function SettingsPanel({ settings, onUpdate, isSaving }: SettingsPanelProps) {
   const [voiceAgentHandoffPhone, setVoiceAgentHandoffPhone] = useState('');
   const [voiceAgentRecordCalls, setVoiceAgentRecordCalls] = useState(true);
   const [voiceAgentTestMode, setVoiceAgentTestMode] = useState(false);
+  const [voiceAgentVoice, setVoiceAgentVoice] = useState('Aoede');
+  const [voiceAgentModel, setVoiceAgentModel] = useState('gemini-3.1-flash-live-preview');
+  const [voiceAgentBargeInEnabled, setVoiceAgentBargeInEnabled] = useState(true);
 
   useEffect(() => {
     if (settings) {
@@ -783,6 +786,9 @@ function SettingsPanel({ settings, onUpdate, isSaving }: SettingsPanelProps) {
       setVoiceAgentHandoffPhone(settings.voiceAgentHandoffPhone || '');
       setVoiceAgentRecordCalls(settings.voiceAgentRecordCalls !== false);
       setVoiceAgentTestMode(!!settings.voiceAgentTestMode);
+      setVoiceAgentVoice(settings.voiceAgentVoice || 'Aoede');
+      setVoiceAgentModel(settings.voiceAgentModel || 'gemini-3.1-flash-live-preview');
+      setVoiceAgentBargeInEnabled(settings.voiceAgentBargeInEnabled !== false);
     }
   }, [settings]);
 
@@ -794,6 +800,9 @@ function SettingsPanel({ settings, onUpdate, isSaving }: SettingsPanelProps) {
       voiceAgentHandoffPhone,
       voiceAgentRecordCalls,
       voiceAgentTestMode,
+      voiceAgentVoice,
+      voiceAgentModel,
+      voiceAgentBargeInEnabled,
     });
   };
 
@@ -902,6 +911,19 @@ function SettingsPanel({ settings, onUpdate, isSaving }: SettingsPanelProps) {
 
               <label className="flex items-center justify-between cursor-pointer">
                 <div className="space-y-0.5">
+                  <span className="text-sm font-semibold text-slate-700">Barge-In Enabled</span>
+                  <p className="text-xs text-slate-400">Allow customers to speak and interrupt the agent while it is speaking.</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={voiceAgentBargeInEnabled}
+                  onChange={e => setVoiceAgentBargeInEnabled(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                />
+              </label>
+
+              <label className="flex items-center justify-between cursor-pointer">
+                <div className="space-y-0.5">
                   <span className="text-sm font-semibold text-slate-700">Test / Simulation Mode</span>
                   <p className="text-xs text-slate-400">Simulate order creation without pushing to active kitchen display channels.</p>
                 </div>
@@ -913,6 +935,39 @@ function SettingsPanel({ settings, onUpdate, isSaving }: SettingsPanelProps) {
                 />
               </label>
             </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
+          <div className="space-y-2">
+            <label className="block text-sm font-semibold text-slate-700">AI Voice (UK Female)</label>
+            <select
+              value={voiceAgentVoice}
+              onChange={e => setVoiceAgentVoice(e.target.value)}
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none bg-white transition-all duration-200"
+            >
+              <option value="Aoede">Aoede (Polite UK Female - Recommended)</option>
+              <option value="Charon">Charon</option>
+              <option value="Fenrir">Fenrir</option>
+              <option value="Kore">Kore</option>
+              <option value="Puck">Puck</option>
+            </select>
+            <p className="text-xs text-slate-400">Select the UK female or general voice for the agent.</p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-sm font-semibold text-slate-700">AI Gemini Model</label>
+            <select
+              value={voiceAgentModel}
+              onChange={e => setVoiceAgentModel(e.target.value)}
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none bg-white transition-all duration-200"
+            >
+              <option value="gemini-3.1-flash-live-preview">gemini-3.1-flash-live-preview (Active model - Low Latency)</option>
+              <option value="gemini-2.0-flash-live-001">gemini-2.0-flash-live-001</option>
+              <option value="gemini-live-2.5-flash-preview">gemini-live-2.5-flash-preview</option>
+              <option value="gemini-2.0-flash-exp">gemini-2.0-flash-exp</option>
+            </select>
+            <p className="text-xs text-slate-400">Select the underlying Gemini model version for voice operations.</p>
           </div>
         </div>
       </div>
