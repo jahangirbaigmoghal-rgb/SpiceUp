@@ -226,14 +226,44 @@ async def health(request: Request):
         "dbError": db_error,
     }
 
-
-
-
-
-
-
-
-
+@app.get("/db-debug")
+async def db_debug(request: Request):
+    database = request.app.state.db
+    if not database:
+        return {"error": "MongoDB is not configured"}
+        
+    try:
+        # Find raw menu items
+        raw_items = list(database.menuitems.find({}).limit(5))
+        serialized_raw = []
+        for item in raw_items:
+            # Convert ObjectId to string for JSON serialization
+            item["_id"] = str(item["_id"])
+            if "category" in item:
+                item["category"] = str(item["category"])
+            if "tenant" in item:
+                item["tenant"] = str(item["tenant"])
+            serialized_raw.append(item)
+            
+        # Find items with bhuna or balti in name
+        match_items = list(database.menuitems.find({"name": {"$regex": "(bhuna|balti)", "$options": "i"}}))
+        serialized_match = []
+        for item in match_items:
+            item["_id"] = str(item["_id"])
+            if "category" in item:
+                item["category"] = str(item["category"])
+            if "tenant" in item:
+                item["tenant"] = str(item["tenant"])
+            serialized_match.append(item)
+            
+        return {
+            "database": database.name,
+            "collection_names": database.list_collection_names(),
+            "first_5_items": serialized_raw,
+            "bhuna_balti_items": serialized_match
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.post("/incoming-call")
 async def incoming_call(request: Request):
