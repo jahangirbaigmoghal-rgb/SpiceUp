@@ -51,7 +51,7 @@ class Config:
         if not mongodb_uri:
             raise ValueError("MONGODB_URI environment variable is required")
 
-        gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash-live-001")
+        gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash-exp")
         gemini_voice = os.getenv("GEMINI_VOICE", "Charon")
         twilio_phone_number = os.getenv("TWILIO_PHONE_NUMBER", "+441782288662")
         backend_url = os.getenv("BACKEND_URL", "http://localhost:5001").rstrip("/")

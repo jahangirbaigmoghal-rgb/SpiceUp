@@ -57,7 +57,7 @@ const tenantSchema = new mongoose.Schema({
   voiceAgentHandoffPhone: String,
   voiceAgentMaxCallMinutes: { type: Number, default: 8 },
   voiceAgentTestMode: { type: Boolean, default: false },
-  voiceAgentModel: { type: String, default: 'gemini-2.0-flash-live-001' },
+  voiceAgentModel: { type: String, default: 'gemini-2.0-flash-exp' },
   voiceAgentLanguage: { type: String, default: 'en-GB' },
   voiceAgentTargetLatencyMs: { type: Number, default: 900 },
   voiceAgentMaxSilenceSeconds: { type: Number, default: 6 },

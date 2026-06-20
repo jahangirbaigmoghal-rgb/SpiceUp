@@ -73,7 +73,7 @@ export async function getSettings(req, res, next) {
         voiceAgentHandoffPhone: '01782 811112',
         voiceAgentMaxCallMinutes: 8,
         voiceAgentTestMode: false,
-        voiceAgentModel: 'gemini-2.0-flash-live-001',
+        voiceAgentModel: 'gemini-2.0-flash-exp',
         voiceAgentLanguage: 'en-GB',
         voiceAgentTargetLatencyMs: 900,
         voiceAgentMaxSilenceSeconds: 6,
