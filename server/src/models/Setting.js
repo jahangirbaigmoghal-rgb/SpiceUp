@@ -50,7 +50,7 @@ const settingSchema = new mongoose.Schema({
   voiceAgentHandoffPhone: { type: String, default: '01782 811112' },
   voiceAgentMaxCallMinutes: { type: Number, default: 8 },
   voiceAgentTestMode: { type: Boolean, default: false },
-  voiceAgentModel: { type: String, default: 'gemini-2.0-flash-exp' },
+  voiceAgentModel: { type: String, default: 'gemini-3.1-flash-live-preview' },
   voiceAgentLanguage: { type: String, default: 'en-GB' },
   voiceAgentTargetLatencyMs: { type: Number, default: 900 },
   voiceAgentMaxSilenceSeconds: { type: Number, default: 6 },
