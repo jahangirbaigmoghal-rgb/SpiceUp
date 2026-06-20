@@ -188,6 +188,7 @@ app.add_middleware(
 @app.get("/health")
 async def health(request: Request):
     database = request.app.state.db
+    config = request.app.state.config
     mongo_configured = database is not None
     database_name = database.name if mongo_configured else None
     
