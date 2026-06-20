@@ -194,6 +194,7 @@ async def health(request: Request):
     
     active_profile = None
     collections_info = {}
+    db_error = None
     if mongo_configured:
         try:
             tenant = database.tenants.find_one({"isActive": True})
@@ -205,6 +206,7 @@ async def health(request: Request):
                 collections_info[col] = database[col].count_documents({})
         except Exception as e:
             logger.error(f"Error querying active tenant profile: {e}")
+            db_error = str(e)
             
     return {
         "ok": True,
@@ -212,7 +214,9 @@ async def health(request: Request):
         "database": database_name,
         "activeProfile": active_profile,
         "collections": collections_info,
+        "dbError": db_error,
     }
+
 
 
 
