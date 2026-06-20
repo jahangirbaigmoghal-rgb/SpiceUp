@@ -217,6 +217,24 @@ async def health(request: Request):
         except Exception as e:
             logger.error(f"Error querying settings in health check: {e}")
 
+    # Fetch available models for diagnostics
+    from google import genai
+    gemini_models = []
+    if config.gemini_api_key:
+        try:
+            client = genai.Client(api_key=config.gemini_api_key)
+            for m in client.models.list():
+                methods = getattr(m, 'supported_generation_methods', [])
+                is_live = any("bidiGenerateContent" in method for method in methods)
+                gemini_models.append({
+                    "name": m.name,
+                    "isLive": is_live,
+                    "methods": methods
+                })
+        except Exception as e:
+            logger.error(f"Error listing models in health check: {e}")
+            gemini_models = [{"error": str(e)}]
+
     # Fetch menu for diagnostics
     menu_summary = "Not fetched"
     menu_success = False
@@ -237,6 +255,7 @@ async def health(request: Request):
         "database": database_name,
         "activeProfile": active_profile,
         "settings": db_settings,
+        "geminiModels": gemini_models,
         "menu": {
             "success": menu_success,
             "summary": menu_summary,
