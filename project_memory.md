@@ -138,5 +138,19 @@ Always refer to the Final Review Implementation Plan for alignment, feature requ
 1. Inspect the voice agent backend logs on Render to see if the WebSocket connection completes successfully. If a 1008 error is thrown, the model specified in the database is likely deprecated or unsupported.
 2. Ensure the active database document's `voiceAgentModel` field is updated to the latest supported Live API model (e.g., `gemini-3.1-flash-live-preview`).
 
+### AI Voice Agent post-call 404 error and menu items hallucination/cook-up
+**Issue**: Post-call analysis fails with a 404 NOT_FOUND error in the Render logs. Additionally, the agent hallucinates ("cooks up") items or prices instead of adhering strictly to the active restaurant menu.
+**Root Cause**:
+1. **Sunsetted Analysis Model**: The post-call summarization inside `call_recorder.py` was hardcoded to use `gemini-2.0-flash`, which has been sunsetted by Google, resulting in a 404 error.
+2. **Missing Menu Context**: The agent only loaded the menu if the customer asked about it or if a tool was explicitly called. On direct ordering, the model relied on its pre-trained weights to guess items and prices, cooking up non-existent items.
+**Fixes Applied**:
+1. **Updated Analysis Model**: Changed the model in `call_recorder.py` to `gemini-2.5-flash` (non-realtime text model) to fix the post-call 404 error.
+2. **Active Menu Preloading**: Modified `main.py` to fetch the full menu via `pos_tools.get_full_menu()` at websocket start and passed it to `build_system_prompt`. Preloaded the menu summary directly into the system instructions under the `ACTIVE POS MENU` section.
+3. **Hardened Prompt Guardrails**: Modified `system_prompt.py` to add strict guidelines for both order-taking and alternative suggestions. Explicitly forbid recommending, suggesting, or adding any items or options that are not in the preloaded menu list, forcing the agent to say "I'm sorry, we don't have that on our menu" when any non-existent dishes (like "Meat Bhuna", "Doner Kebab", "Meat Korma", etc.) are mentioned.
+**Verification / Next-Time Checklist**:
+1. Check Render logs to ensure post-call Gemini analysis completes successfully with `gemini-2.5-flash` status 200 without 404 errors.
+2. Verify that the agent strictly refuses to suggest or order any item not present in the preloaded menu context.
+3. When using a temporary diagnostic endpoint on `/health`, verify that the `menuSummarySnippet` returns active items (e.g. Balti Dishes, Pizzas, Burgers, Sides) and that no other dishes are hallucinated during conversation.
+
 
 
