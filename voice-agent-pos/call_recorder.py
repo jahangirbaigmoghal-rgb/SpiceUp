@@ -28,17 +28,21 @@ class CallRecorder:
         self.agent_path = os.path.join(self.recordings_dir, f"agent_{call_sid}.wav")
         self.stereo_path = os.path.join(self.recordings_dir, f"stereo_{call_sid}.wav")
         
-        # Open user WAV (16kHz PCM mono 16-bit)
-        self.user_wav = wave.open(self.user_path, "wb")
-        self.user_wav.setnchannels(1)
-        self.user_wav.setsampwidth(2)
-        self.user_wav.setframerate(16000)
-        
-        # Open agent WAV (16kHz PCM mono 16-bit, resampled from 24kHz output of Gemini)
-        self.agent_wav = wave.open(self.agent_path, "wb")
-        self.agent_wav.setnchannels(1)
-        self.agent_wav.setsampwidth(2)
-        self.agent_wav.setframerate(16000)
+        self.user_wav = None
+        self.agent_wav = None
+
+        if self.config.enable_recording:
+            # Open user WAV (16kHz PCM mono 16-bit)
+            self.user_wav = wave.open(self.user_path, "wb")
+            self.user_wav.setnchannels(1)
+            self.user_wav.setsampwidth(2)
+            self.user_wav.setframerate(16000)
+            
+            # Open agent WAV (16kHz PCM mono 16-bit, resampled from 24kHz output of Gemini)
+            self.agent_wav = wave.open(self.agent_path, "wb")
+            self.agent_wav.setnchannels(1)
+            self.agent_wav.setsampwidth(2)
+            self.agent_wav.setframerate(16000)
         
         self.agent_ratecv_state = None
         self.total_user_samples = 0
@@ -47,6 +51,8 @@ class CallRecorder:
         self.closed = False
 
     def write_user_audio(self, pcm_bytes: bytes):
+        if not self.config.enable_recording:
+            return
         if not self.closed:
             try:
                 self.user_wav.writeframes(pcm_bytes)
@@ -55,6 +61,8 @@ class CallRecorder:
                 logger.error(f"Error writing user audio for call {self.call_sid}: {e}")
 
     def write_agent_audio(self, pcm_bytes: bytes):
+        if not self.config.enable_recording:
+            return
         if not self.closed:
             try:
                 # Resample agent audio in real-time from Gemini's 24kHz to 16kHz
@@ -83,18 +91,21 @@ class CallRecorder:
 
     def close_files(self):
         if not self.closed:
-            try:
-                # Add final silence padding on close to sync both channels
-                silence_samples = self.total_user_samples - self.total_agent_samples
-                if silence_samples > 0:
-                    silence_bytes = b"\x00\x00" * silence_samples
-                    self.agent_wav.writeframes(silence_bytes)
-                    self.total_agent_samples += silence_samples
+            if self.config.enable_recording:
+                try:
+                    # Add final silence padding on close to sync both channels
+                    silence_samples = self.total_user_samples - self.total_agent_samples
+                    if silence_samples > 0:
+                        silence_bytes = b"\x00\x00" * silence_samples
+                        self.agent_wav.writeframes(silence_bytes)
+                        self.total_agent_samples += silence_samples
 
-                self.user_wav.close()
-                self.agent_wav.close()
-            except Exception as e:
-                logger.error(f"Error closing WAV files: {e}")
+                    if self.user_wav:
+                        self.user_wav.close()
+                    if self.agent_wav:
+                        self.agent_wav.close()
+                except Exception as e:
+                    logger.error(f"Error closing WAV files: {e}")
             self.closed = True
 
     def _resample_pcm(self, pcm_bytes, sample_width, channels, in_rate, out_rate):
@@ -107,6 +118,8 @@ class CallRecorder:
 
     def _build_stereo_wav(self) -> bytes | None:
         """Left channel = caller (16kHz), right channel = agent (16kHz resampled from 24kHz)."""
+        if not self.config.enable_recording:
+            return None
         try:
             self.close_files()
             

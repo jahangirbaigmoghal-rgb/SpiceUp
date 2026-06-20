@@ -204,7 +204,7 @@ async def health(request: Request):
         try:
             tenant = database.tenants.find_one({"isActive": True})
             if tenant:
-                active_profile = tenant.get("name")
+                active_profile = tenant.get("businessName")
         except Exception as e:
             logger.error(f"Error querying active tenant profile: {e}")
             
@@ -274,11 +274,9 @@ async def incoming_call(request: Request):
 
     logger.info(f"Routing Twilio stream connection to websocket path: {ws_url}")
     
-    # Generate TwiML response playing consent and connecting to media stream
-    consent_message = config.recording_consent_message
+    # Generate TwiML response connecting straight to media stream
     twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
     <Response>
-        <Say>{consent_message}</Say>
         <Connect>
             <Stream url="{ws_url}">
                 <Parameter name="callerNumber" value="{caller_number}" />

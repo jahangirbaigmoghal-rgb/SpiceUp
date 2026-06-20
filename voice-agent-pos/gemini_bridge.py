@@ -306,9 +306,8 @@ class GeminiBridge:
             self.session_ctx = self.client.aio.live.connect(model=self.config.gemini_model, config=live_config)
             self.session = await self.session_ctx.__aenter__()
             
-            # Start Call Recorder if enabled
-            if self.config.enable_recording:
-                self.recorder = CallRecorder(self.call_sid, self.config, self.db)
+            # Always start Call Recorder to track transcripts and timeline (saving to DB at finalize)
+            self.recorder = CallRecorder(self.call_sid, self.config, self.db)
                 
             # Launch background loops
             self.receive_task = asyncio.create_task(self._receive_from_gemini())
@@ -319,8 +318,12 @@ class GeminiBridge:
                 f"The customer has joined the call. Greet them warmly as {self.config.restaurant_name} ordering assistant. "
                 "Ask if they want delivery or collection, and guide them through the menu ordering. Let them know they can speak naturally."
             )
-            await self.session.send_realtime_input(text=greeting_msg)
-            logger.info("Gemini session connected and greeting sent.")
+            # Use send_client_content with turn_complete=True to force Gemini to generate greeting immediately
+            await self.session.send_client_content(
+                turns=[types.Content(role="user", parts=[types.Part(text=greeting_msg)])],
+                turn_complete=True
+            )
+            logger.info("Gemini session connected and greeting sent via send_client_content.")
         except Exception as e:
             logger.error(f"Error starting Gemini Live session: {e}")
             self.is_running = False

@@ -951,7 +951,9 @@ export function compileTextReceipt(order, settings = {}) {
   }
   text += `${border}\n\n`;
 
-  text += `Items:\n`;
+  text += `ITEMS:\n`;
+  text += `Qty  Item                     Price\n`;
+  text += `${border}\n`;
   if (order.lines && order.lines.length > 0) {
     for (const line of order.lines) {
       if (line.isBundle) {
@@ -1013,7 +1015,34 @@ export function compileTextReceipt(order, settings = {}) {
     text += `${padLine("Delivery Charge", `£${(order.deliveryChargePence / 100).toFixed(2)}`, 36)}\n`;
   }
   text += `${padLine("TOTAL", `£${((order.totalPence || 0) / 100).toFixed(2)}`, 36)}\n`;
+  text += `${border}\n\n`;
+
+  // Bifurcated VAT Breakdown Table
+  text += `BIFURCATED VAT BREAKDOWN:\n`;
+  text += `Rate    Net       VAT       Gross\n`;
   text += `${border}\n`;
+  const breakdown = order.vatBreakdown || {};
+  let totalNet = 0;
+  let totalVat = 0;
+  let totalGross = 0;
+  for (const rate of Object.keys(breakdown)) {
+    const b = breakdown[rate];
+    const rStr = `${rate}%`.padEnd(8);
+    const netStr = `£${((b.netPence || 0) / 100).toFixed(2)}`.padEnd(10);
+    const vatStr = `£${((b.vatPence || 0) / 100).toFixed(2)}`.padEnd(10);
+    const grossStr = `£${((b.grossPence || 0) / 100).toFixed(2)}`;
+    text += `${rStr}${netStr}${vatStr}${grossStr}\n`;
+    totalNet += (b.netPence || 0);
+    totalVat += (b.vatPence || 0);
+    totalGross += (b.grossPence || 0);
+  }
+  text += `${border}\n`;
+  const totLabel = `Total`.padEnd(8);
+  const totNetStr = `£${(totalNet / 100).toFixed(2)}`.padEnd(10);
+  const totVatStr = `£${(totalVat / 100).toFixed(2)}`.padEnd(10);
+  const totGrossStr = `£${(totalGross / 100).toFixed(2)}`;
+  text += `${totLabel}${totNetStr}${totVatStr}${totGrossStr}\n`;
+  text += `${border}\n\n`;
   
   const payMethod = order.payments?.[0]?.method || 'unpaid';
   const payStatus = order.payments?.[0]?.status || 'pending';
