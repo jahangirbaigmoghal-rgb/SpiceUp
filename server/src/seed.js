@@ -15,6 +15,8 @@ import ManualProduct from './models/ManualProduct.js';
 import Variation from './models/Variation.js';
 import Bundle from './models/Bundle.js';
 
+const TARGET_TENANT_ID = '6a216d61d4823e48c82a46ee';
+
 export async function seed() {
   console.log('🧹 Clearing old collections...');
   await Promise.all([
@@ -36,6 +38,8 @@ export async function seed() {
   ]);
   console.log('🏢 Creating demo tenant...');
   const tenant = await Tenant.create({
+    _id: TARGET_TENANT_ID,
+    isActive: true,
     slug: 'rupeyal-express',
     businessName: "Rupeyal Express",
     address: {
@@ -742,19 +746,17 @@ if (process.argv[1]?.endsWith('seed.js')) {
 }
 
 export async function seedIfEmpty() {
-  const targetTenantId = '6a216d61d4823e48c82a46ee';
-  
   // Verify if the target tenant exists and has users
   const [targetTenantExists, userCount] = await Promise.all([
-    Tenant.findById(targetTenantId).select('_id').lean(),
-    User.countDocuments({ tenant: targetTenantId })
+    Tenant.findById(TARGET_TENANT_ID).select('_id').lean(),
+    User.countDocuments({ tenant: TARGET_TENANT_ID })
   ]);
 
   if (targetTenantExists && userCount > 0) {
     return;
   }
 
-  console.log('🌱 Target tenant 6a216d61d4823e48c82a46ee not found or users missing. Re-seeding database...');
+  console.log(`🌱 Target tenant ${TARGET_TENANT_ID} not found or users missing. Re-seeding database...`);
   await seed();
 }
 
