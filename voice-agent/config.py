@@ -53,7 +53,7 @@ class Config:
         if not mongodb_uri:
             raise ValueError("MONGODB_URI environment variable is required")
 
-        mongodb_db_name = os.getenv("MONGODB_DB_NAME", "takeawaypos")
+        mongodb_db_name = os.getenv("MONGODB_DB_NAME", "spiceup")
 
         gemini_model = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-live-preview")
         gemini_voice = os.getenv("GEMINI_VOICE", "Aoede")

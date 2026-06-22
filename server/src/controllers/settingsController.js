@@ -31,7 +31,7 @@ export async function getSettings(req, res, next) {
       // Seed default settings for the tenant
       setting = await Setting.create({
         tenant: req.tenantId,
-        receiptHeader: 'TakeawayPOS Pro',
+        receiptHeader: 'SpiceUp',
         receiptFooter: 'Thank you for your order!',
         receiptShowLogo: true,
         receiptShowVat: true,

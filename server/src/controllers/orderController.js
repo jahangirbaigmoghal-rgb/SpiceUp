@@ -1136,7 +1136,7 @@ export async function generateReceiptPdf(req, res, next) {
     const doc = new PDFDocument({ size: [216, 600], margins: { top: 10, bottom: 10, left: 10, right: 10 } });
     doc.pipe(res);
 
-    doc.fontSize(12).text('TAKEAWAYPOS PRO', { align: 'center' });
+    doc.fontSize(12).text('SPICEUP', { align: 'center' });
     doc.fontSize(8).text(`Reference: ${order.reference}`, { align: 'center' });
     doc.text(`Date: ${new Date(order.createdAt).toLocaleString('en-GB')}`, { align: 'center' });
     doc.text('-------------------------------------', { align: 'center' });

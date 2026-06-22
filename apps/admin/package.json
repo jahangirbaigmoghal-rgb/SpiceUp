@@ -1,5 +1,5 @@
 {
-  "name": "@takeaway-pos/admin",
+  "name": "@spiceup/admin",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -9,9 +9,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@takeaway-pos/ui": "*",
-    "@takeaway-pos/utils": "*",
-    "@takeaway-pos/api-client": "*",
+    "@spiceup/ui": "*",
+    "@spiceup/utils": "*",
+    "@spiceup/api-client": "*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.2",

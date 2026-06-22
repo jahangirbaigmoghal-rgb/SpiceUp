@@ -21,8 +21,8 @@ import {
   computeVatBreakdown, 
   isValidUKPostcode, 
   generateIdempotencyKey 
-} from '@takeaway-pos/utils';
-import { authApi, menuApi, ordersApi, deliveryApi } from '@takeaway-pos/api-client';
+} from '@spiceup/utils';
+import { authApi, menuApi, ordersApi, deliveryApi } from '@spiceup/api-client';
 
 interface ModifierOption {
   _id: string;
@@ -926,7 +926,7 @@ export default function App() {
               <ShoppingBag className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight">TakeawayPOS Pro</h1>
+              <h1 className="text-xl font-bold tracking-tight">SpiceUp</h1>
               <p className="text-xs text-slate-400">Terminal Access Control</p>
             </div>
           </div>
@@ -1001,7 +1001,7 @@ export default function App() {
           <div className="w-9 h-9 bg-gradient-to-tr from-brand-600 to-orange-400 rounded-lg flex items-center justify-center">
             <ShoppingBag className="w-5 h-5 text-white" />
           </div>
-          <span className="font-bold tracking-tight text-lg">TakeawayPOS <span className="text-brand-500">Pro</span></span>
+          <span className="font-bold tracking-tight text-lg">SpiceUp</span>
           <span className="h-4 w-px bg-slate-800" />
           <div className="flex items-center space-x-2 text-xs bg-slate-900 px-3 py-1 rounded-full text-slate-400 border border-slate-800">
             <span>Terminal: {terminalId}</span>

@@ -10,7 +10,7 @@ async function bootstrap() {
     // Connect to databases
     console.log('DEBUG STARTUP - env.dbName:', env.dbName, 'env.mongoUri:', env.mongoUri);
     await connectDb();
-    const { seedIfEmpty, repairDefaultUserPins, ensureAdminExists } = await import('./seed_takeawaypos.js');
+    const { seedIfEmpty, repairDefaultUserPins, ensureAdminExists } = await import('./seed_spiceup.js');
     await seedIfEmpty();
     await repairDefaultUserPins();  // Fix any corrupted PINs from the old double-hash bug
     await ensureAdminExists();
@@ -21,7 +21,7 @@ async function bootstrap() {
     initSocket(httpServer);
 
     httpServer.listen(env.port, () => {
-      console.log(`\n🚀 TakeawayPOS Pro Server running on port ${env.port}`);
+      console.log(`\n🚀 SpiceUp Server running on port ${env.port}`);
       console.log(`   Environment: ${env.nodeEnv}`);
       console.log(`   API: http://localhost:${env.port}/api/health`);
       console.log(`   Socket.io: ws://localhost:${env.port}\n`);

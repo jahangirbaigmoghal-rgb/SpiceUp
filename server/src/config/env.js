@@ -40,7 +40,7 @@ export const env = {
   // Database
   mongoUri: process.env.MONGODB_URI ?? '',
   useMemoryDb: process.env.USE_MEMORY_DB === 'true' || !process.env.MONGODB_URI,
-  dbName: process.env.MONGODB_DB_NAME || 'takeawaypos',
+  dbName: process.env.MONGODB_DB_NAME || 'spiceup',
 
   // Auth — never silently fall back to a known default in production.
   jwtSecret: secret('JWT_SECRET', 'dev_secret_change_in_production'),
@@ -83,7 +83,7 @@ export const env = {
   smtpPort: parseInt(process.env.SMTP_PORT ?? '587', 10),
   smtpUser: process.env.SMTP_USER ?? '',
   smtpPass: process.env.SMTP_PASS ?? '',
-  emailFrom: process.env.EMAIL_FROM ?? 'noreply@takeawaypos.co.uk',
+  emailFrom: process.env.EMAIL_FROM ?? 'noreply@spiceup.co.uk',
 
   // Single tenant ID (set from seeded Tenant doc)
   defaultTenantId: process.env.DEFAULT_TENANT_ID ?? '',

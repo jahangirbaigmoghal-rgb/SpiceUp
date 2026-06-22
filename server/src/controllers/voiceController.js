@@ -483,7 +483,7 @@ export async function placeVoiceOrder(req, res, next) {
         await twilioClient.messages.create({
           body: placementMsg,
           to: customer_phone,
-          from: env.twilioPhoneNumber || 'TakeawayPOS',
+          from: env.twilioPhoneNumber || 'SpiceUp',
         });
       } catch (smsErr) {
         console.error('SMS confirmation failed:', smsErr);
@@ -581,7 +581,7 @@ export async function sendVoicePaymentLink(req, res, next) {
     await order.save();
 
     // Send SMS
-    const smsMessage = `Thank you for your order at TakeawayPOS Pro. Please complete your card payment of £${(amount_pence / 100).toFixed(2)} here: ${checkoutUrl}`;
+    const smsMessage = `Thank you for your order at SpiceUp. Please complete your card payment of £${(amount_pence / 100).toFixed(2)} here: ${checkoutUrl}`;
     let smsSent = false;
 
     if (twilioClient) {
@@ -589,7 +589,7 @@ export async function sendVoicePaymentLink(req, res, next) {
         await twilioClient.messages.create({
           body: smsMessage,
           to: phone_number,
-          from: env.twilioPhoneNumber || 'TakeawayPOS',
+          from: env.twilioPhoneNumber || 'SpiceUp',
         });
         smsSent = true;
 
@@ -706,13 +706,13 @@ export async function cancelVoiceOrder(req, res, next) {
     emitOrderStatusUpdate(req.tenantId, order._id.toString(), 'cancelled');
 
     // Notify customer via Twilio SMS
-    const cancelMsg = `Your order ${order.reference} at TakeawayPOS Pro has been cancelled successfully.`;
+    const cancelMsg = `Your order ${order.reference} at SpiceUp has been cancelled successfully.`;
     if (twilioClient && order.customer.phone) {
       try {
         await twilioClient.messages.create({
           body: cancelMsg,
           to: order.customer.phone,
-          from: env.twilioPhoneNumber || 'TakeawayPOS',
+          from: env.twilioPhoneNumber || 'SpiceUp',
         });
       } catch (smsErr) {
         console.error('SMS notification failed:', smsErr);
@@ -927,7 +927,7 @@ export async function modifyVoiceOrder(req, res, next) {
         await twilioClient.messages.create({
           body: smsMessage,
           to: order.customer.phone,
-          from: env.twilioPhoneNumber || 'TakeawayPOS',
+          from: env.twilioPhoneNumber || 'SpiceUp',
         });
       } catch (smsErr) {
         console.error('SMS notification failed:', smsErr);
@@ -965,7 +965,7 @@ export function compileTextReceipt(order, settings = {}) {
   const border = '------------------------------------';
   
   let text = '';
-  text += `🧾 ${settings.storeName?.toUpperCase() || "TAKEAWAYPOS"}\n`;
+  text += `🧾 ${settings.storeName?.toUpperCase() || "SPICEUP"}\n`;
   if (settings.storeAddress) text += `${settings.storeAddress}\n`;
   if (settings.storePhone) text += `Tel: ${settings.storePhone}\n`;
   text += `${border}\n`;
@@ -1094,7 +1094,7 @@ export function compileTextReceipt(order, settings = {}) {
     .join('\n');
   
   text += `${footer}\n`;
-  text += `Powered by TakeAwayPOS`;
+  text += `Powered by SpiceUp`;
   
   return text;
 }
@@ -1116,7 +1116,7 @@ export async function sendVoiceBillSms(req, res, next) {
         await twilioClient.messages.create({
           body: smsMessage,
           to: phone,
-          from: env.twilioPhoneNumber || 'TakeawayPOS',
+          from: env.twilioPhoneNumber || 'SpiceUp',
         });
         smsSent = true;
       } catch (smsErr) {

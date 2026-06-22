@@ -137,7 +137,7 @@ export async function printCustomerReceipt(order, settings) {
     .alignCenter()
     .bold(true)
     .sizeDouble()
-    .line(settings.storeName || "TakeAwayPOS")
+    .line(settings.storeName || "SpiceUp")
     .sizeNormal()
     .bold(false)
     .line(settings.storeAddress || "")
@@ -236,7 +236,7 @@ export async function printCustomerReceipt(order, settings) {
   
   builder.alignCenter()
     .line(settings.receiptFooter || "Thank you for your custom!")
-    .line("Powered by TakeAwayPOS")
+    .line("Powered by SpiceUp")
     .feed(4)
     .cut();
 

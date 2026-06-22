@@ -13836,7 +13836,7 @@ export async function seed() {
   console.log('\n🎉 DATABASE SEED COMPLETED SUCCESSFULLY!');
 }
 
-if (process.argv[1]?.endsWith('seed_takeawaypos.js')) {
+if (process.argv[1]?.endsWith('seed_spiceup.js')) {
   try {
     await connectDb();
     await seed();

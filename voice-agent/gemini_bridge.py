@@ -65,7 +65,7 @@ class GeminiBridge:
         logger.info(f"Starting Gemini Live session for CallSid={self.call_sid} with voice={self.config.gemini_voice}")
         
         # Define Gemini function declarations
-        takeaway_pos_tools = types.Tool(
+        spiceup_tools = types.Tool(
             function_declarations=[
                 types.FunctionDeclaration(
                     name="get_full_menu",
@@ -298,7 +298,7 @@ class GeminiBridge:
             ),
             input_audio_transcription=types.AudioTranscriptionConfig(),
             output_audio_transcription=types.AudioTranscriptionConfig(),
-            tools=[takeaway_pos_tools]
+            tools=[spiceup_tools]
         )
 
         # Connect to Gemini Live API

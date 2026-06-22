@@ -64,7 +64,7 @@ export async function loginPin(req, res, next) {
 
     // Find all active users in this tenant to verify PIN via bcrypt only.
     // Corrupted default-user PINs are repaired at boot by repairDefaultUserPins()
-    // in seed_takeawaypos.js, so no in-request auth bypass is needed (or safe).
+    // in seed_spiceup.js, so no in-request auth bypass is needed (or safe).
     const users = await User.find({ tenant: req.tenantId, isActive: true });
     let authenticatedUser = null;
 

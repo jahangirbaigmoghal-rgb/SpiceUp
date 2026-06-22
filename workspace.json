@@ -1,7 +1,7 @@
 {
-  "name": "takeaway-pos-pro",
+  "name": "spiceup",
   "version": "1.0.0",
-  "description": "TakeawayPOS Pro - Enterprise-grade takeaway POS system",
+  "description": "SpiceUp - Enterprise-grade takeaway POS system",
   "apps": ["apps/pos", "apps/admin", "apps/kds", "apps/customer"],
   "packages": ["packages/ui", "packages/utils", "packages/api-client"],
   "server": "server",

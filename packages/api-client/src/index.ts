@@ -2,7 +2,7 @@ import axios, { type AxiosInstance, type AxiosRequestConfig } from 'axios';
 
 const API_BASE_URL = (import.meta as any).env?.VITE_API_URL ?? 'http://localhost:5001';
 
-/** Create a configured Axios instance for TakeawayPOS API. */
+/** Create a configured Axios instance for SpiceUp API. */
 function createApiClient(): AxiosInstance {
   const client = axios.create({
     baseURL: `${API_BASE_URL}/api`,

@@ -13,7 +13,7 @@ export async function connectDb() {
 }
 
 async function getMemoryUri() {
-  memoryServer = await MongoMemoryServer.create({ instance: { dbName: 'takeaway_pos_dev' } });
+  memoryServer = await MongoMemoryServer.create({ instance: { dbName: 'spiceup_dev' } });
   return memoryServer.getUri();
 }
 

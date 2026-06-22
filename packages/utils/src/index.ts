@@ -1,6 +1,6 @@
 /**
- * @takeaway-pos/utils
- * Shared utility functions for all TakeawayPOS Pro apps.
+ * @spiceup/utils
+ * Shared utility functions for all SpiceUp apps.
  * UK-specific: GBP, pence-based money, UK VAT rates, UK postcodes.
  */
 

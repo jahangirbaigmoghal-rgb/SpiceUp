@@ -1,6 +1,6 @@
-# TakeawayPOS Pro 🍕🍔🍟
+# SpiceUp 🍕🍔🍟
 
-TakeawayPOS Pro is a unified, production-grade point-of-sale, online ordering, and AI voice agent ecosystem designed specifically for takeaways, fast-food restaurants, and cafes in the United Kingdom. Built as a Turborepo-orchestrated monorepo, it connects an admin management backoffice, a cashier terminal, a kitchen display system, a customer-facing web portal/PWA, and a real-time Gemini-powered phone ordering assistant into a single, cohesive loop.
+SpiceUp is a unified, production-grade point-of-sale, online ordering, and AI voice agent ecosystem designed specifically for takeaways, fast-food restaurants, and cafes in the United Kingdom. Built as a Turborepo-orchestrated monorepo, it connects an admin management backoffice, a cashier terminal, a kitchen display system, a customer-facing web portal/PWA, and a real-time Gemini-powered phone ordering assistant into a single, cohesive loop.
 
 ---
 
@@ -19,7 +19,7 @@ This repository is organized as a Turborepo monorepo to maximize code reuse, sim
 │   ├── ui/            # Shared Tailwind UI components and design systems
 │   └── utils/         # Helper functions (currency formatting, date utilities)
 ├── server/            # Core Express.js Backend API (MERN Stack)
-└── voice-agent-pos/   # Standalone Python Real-Time AI Voice Agent (Gemini 2.0 Flash)
+└── voice-agent/      # Standalone Python Real-Time AI Voice Agent (Gemini 2.0 Flash)
 ```
 
 ---
@@ -31,7 +31,7 @@ This repository is organized as a Turborepo monorepo to maximize code reuse, sim
 *   **Cashier POS Terminal (`apps/pos`)**: A keyboard- and touch-optimized layout for counter checkout. Supports configurable product hotkeys (e.g., `Alt+1` to `Alt+6`), manual verified scale weight inputs, line-item adjustments, shift lock/unlock, and multiple payment methods (Cash, Card, SMS Pay Link).
 *   **Kitchen Display System (`apps/kds`)**: A live bump screen that tracks incoming tickets. Automatically routes items to their respective preparation stations (e.g., Pizza Station, Grill, Fryer, Curry Station) based on menu definitions.
 *   **Customer Web App/PWA (`apps/customer`)**: An intuitive, mobile-friendly online ordering portal that allows customers to browse menus, build custom bundles, customize meals, track delivery/collection statuses, and perform outward-postcode delivery validation.
-*   **AI Voice Agent (`voice-agent-pos/`)**: A standalone real-time audio service integrated with Twilio that processes telephone orders. Customers calling **`+441782288662`** are greeted by the AI agent (**Rupeyal Express**), which queries POS databases for active menu availability, verifies postcodes, places/cancels orders, and sends Stripe payment links via SMS.
+*   **AI Voice Agent (`voice-agent/`)**: A standalone real-time audio service integrated with Twilio that processes telephone orders. Customers calling **`+441782288662`** are greeted by the AI agent (**Rupeyal Express**), which queries POS databases for active menu availability, verifies postcodes, places/cancels orders, and sends Stripe payment links via SMS.
 
 ### 🇬🇧 UK Compliance & Core Logic
 *   **Pence-Based Arithmetic**: To avoid floating-point errors, all pricing and transactions are calculated and stored internally as integers in pence.
@@ -59,7 +59,7 @@ npm run install:all
 To install the Python voice agent dependencies:
 
 ```bash
-cd voice-agent-pos
+cd voice-agent
 pip install -r requirements.txt
 cd ..
 ```
@@ -93,7 +93,7 @@ Create a `.env` file in the `server/` directory:
 ```bash
 PORT=5001
 CLIENT_URL=http://localhost:5173
-MONGO_URI=mongodb://127.0.0.1:27017/takeawaypos
+MONGO_URI=mongodb://127.0.0.1:27017/spiceup
 USE_MEMORY_DB=false
 JWT_SECRET=your-jwt-auth-secret-key-goes-here
 JWT_EXPIRES_IN=12h
@@ -103,8 +103,8 @@ STORE_NAME="Rupeyal Express"
 STORE_VAT_NUMBER="GB123456789"
 ```
 
-### AI Voice Agent (`voice-agent-pos/.env`)
-Create a `.env` file in the `voice-agent-pos/` directory:
+### AI Voice Agent (`voice-agent/.env`)
+Create a `.env` file in the `voice-agent/` directory:
 
 ```bash
 # Google Gemini API Settings
@@ -118,11 +118,11 @@ TWILIO_AUTH_TOKEN=your_twilio_auth_token
 TWILIO_PHONE_NUMBER=+441782288662
 
 # POS Integration
-BACKEND_URL=https://takeawaypos.onrender.com
+BACKEND_URL=https://spiceup.onrender.com
 VOICE_AGENT_API_KEY=your_voice_agent_api_key
 
 # Database and Server Settings
-MONGODB_URI=mongodb://127.0.0.1:27017/takeawaypos
+MONGODB_URI=mongodb://127.0.0.1:27017/spiceup
 HOST=0.0.0.0
 PORT=5050
 RESTAURANT_NAME="Rupeyal Express"
@@ -132,7 +132,7 @@ RESTAURANT_NAME="Rupeyal Express"
 
 ## 📞 Real-Time AI Voice Agent Integration
 
-The **`voice-agent-pos`** application connects a Twilio Media Stream to the Google Gemini Live API WebSocket endpoint, facilitating real-time duplex voice conversations. 
+The **`voice-agent`** application connects a Twilio Media Stream to the Google Gemini Live API WebSocket endpoint, facilitating real-time duplex voice conversations.
 
 ### Call Flow & POS Integration
 1.  **Incoming Call**: Twilio redirects incoming calls to the voice agent server endpoint `/incoming-call`.

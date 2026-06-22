@@ -10,8 +10,8 @@ import {
   Truck, 
   ShoppingBag
 } from 'lucide-react';
-import { minutesSince, kdsUrgencyClass } from '@takeaway-pos/utils';
-import { ordersApi } from '@takeaway-pos/api-client';
+import { minutesSince, kdsUrgencyClass } from '@spiceup/utils';
+import { ordersApi } from '@spiceup/api-client';
 
 interface OrderItem {
   name: string;

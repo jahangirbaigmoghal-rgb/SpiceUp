@@ -17,8 +17,8 @@ import {
   Bike,
   Star
 } from 'lucide-react';
-import { gbp, isValidUKPostcode, generateIdempotencyKey } from '@takeaway-pos/utils';
-import { menuApi, ordersApi, deliveryApi, settingsApi } from '@takeaway-pos/api-client';
+import { gbp, isValidUKPostcode, generateIdempotencyKey } from '@spiceup/utils';
+import { menuApi, ordersApi, deliveryApi, settingsApi } from '@spiceup/api-client';
 
 interface ModifierOption {
   _id: string;

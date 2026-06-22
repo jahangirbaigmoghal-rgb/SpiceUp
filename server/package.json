@@ -1,5 +1,5 @@
 {
-  "name": "@takeaway-pos/server",
+  "name": "@spiceup/server",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "nodemon --watch src --ext js,json --exec \"node src/index.js\" ",
     "start": "node src/index.js",
-    "seed": "node src/seed_takeawaypos.js",
+    "seed": "node src/seed_spiceup.js",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest"
   },
   "dependencies": {

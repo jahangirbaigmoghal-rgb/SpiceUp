@@ -9,8 +9,8 @@ import {
   Plus,
   X
 } from 'lucide-react';
-import { authApi, menuApi, reportsApi, settingsApi } from '@takeaway-pos/api-client';
-import { gbp, toPence, toPounds, UK_VAT_RATES } from '@takeaway-pos/utils';
+import { authApi, menuApi, reportsApi, settingsApi } from '@spiceup/api-client';
+import { gbp, toPence, toPounds, UK_VAT_RATES } from '@spiceup/utils';
 
 type MenuTab = 'product' | 'groups' | 'component' | 'label' | 'manual-product' | 'short-hand' | 'department' | 'product-time' | 'settings';
 type DrawerMode = null | { type: MenuTab | 'product-item' | 'settings'; item?: any; categoryId?: string };

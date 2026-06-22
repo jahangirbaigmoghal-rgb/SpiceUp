@@ -1,6 +1,6 @@
 # Rupeyal Express AI Voice Agent
 
-Dedicated production-grade AI Voice ordering agent for **Rupeyal Express**, powered by the Google Gemini Live API (WebSockets) and Twilio. It is fully integrated with the TakeAwayPOS system APIs to browse menus, check delivery zones, place orders, and email/SMS confirmation links.
+Dedicated production-grade AI Voice ordering agent for **Rupeyal Express**, powered by the Google Gemini Live API (WebSockets) and Twilio. It is fully integrated with the SpiceUp system APIs to browse menus, check delivery zones, place orders, and email/SMS confirmation links.
 
 ## Architecture
 
@@ -25,7 +25,7 @@ The system is built as a lightweight FastAPI application that hooks directly int
              | (Bi-directional Audio)    | (JSON API HTTP calls)
              v                           v
 +------------+------------+     +--------+--------+
-| Google Gemini Live API  |     |  TakeAwayPOS    |
+| Google Gemini Live API  |     |  SpiceUp         |
 | (gemini-2.0-flash-live) |     |  NodeJS Server  |
 +-------------------------+     +-----------------+
 ```
@@ -36,13 +36,13 @@ The system is built as a lightweight FastAPI application that hooks directly int
 - **Twilio account** with a phone number (e.g. `+441782288662`)
 - **Google Gemini API Key** (supporting Realtime/Live WebSockets)
 - **MongoDB** (to read/write call transcripts and customer profiles)
-- Running instance of **TakeAwayPOS Backend**
+- Running instance of **SpiceUp Backend**
 
 ## Quick Start
 
 1. **Install dependencies**:
    ```bash
-   cd voice-agent-pos
+   cd voice-agent
    pip install -r requirements.txt
    ```
 
@@ -86,7 +86,7 @@ This project is fully ready for deployment on **Render**:
    - **Build Command**: `pip install -r requirements.txt`
    - **Start Command**: `uvicorn main:app --host 0.0.0.0 --port $PORT`
 4. Add all environment variables from `.env` (Gemini API keys, Twilio credentials, Mongo URI, and Backend URL).
-5. Update your Twilio webhook URL to your Render deployment domain (`https://takeawaypos-voice.onrender.com/incoming-call`).
+5. Update your Twilio webhook URL to your Render deployment domain (`https://spiceup-voice.onrender.com/incoming-call`).
 
 ## Available Tools
 
@@ -120,7 +120,7 @@ The voice agent is equipped with the following 10 real-time tools:
 | `TWILIO_ACCOUNT_SID` | Twilio Account SID | *(Required)* |
 | `TWILIO_AUTH_TOKEN` | Twilio Auth Token | *(Required)* |
 | `TWILIO_PHONE_NUMBER` | Active Twilio phone number | `+441782288662` |
-| `BACKEND_URL` | Base URL of the TakeAwayPOS API | `http://localhost:5001` |
+| `BACKEND_URL` | Base URL of the SpiceUp API | `http://localhost:5001` |
 | `VOICE_AGENT_API_KEY` | Internal auth token shared with POS | `dev_voice_agent_key` |
 | `MONGODB_URI` | Connection URI for customer & call log storage | *(Required)* |
 | `RESTAURANT_NAME` | Display name of the restaurant | `Rupeyal Express` |

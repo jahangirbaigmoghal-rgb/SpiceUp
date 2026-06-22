@@ -97,7 +97,7 @@ export async function createPaymentLink(req, res, next) {
             currency: 'gbp',
             product_data: {
               name: `Order payment ${order.reference}`,
-              description: `Payment for TakeawayPOS Pro order ${order.reference}`,
+              description: `Payment for SpiceUp order ${order.reference}`,
             },
             unit_amount: amountPence,
           },
