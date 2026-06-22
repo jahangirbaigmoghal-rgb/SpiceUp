@@ -25,6 +25,10 @@ scratch/
 uploads/
 server/uploads/
 
+# Local diagnostic / inspection scripts that must never carry credentials
+inspect_*.js
+server/src/inspect_*.js
+
 # Turborepo cache
 .turbo/
 

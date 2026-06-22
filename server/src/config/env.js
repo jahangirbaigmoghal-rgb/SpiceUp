@@ -1,11 +1,32 @@
 import 'dotenv/config';
 
+/**
+ * Return the value of an environment variable. In production, throws at module
+ * load time if the variable is unset, so a misconfigured deploy fails fast
+ * instead of silently running on an insecure default.
+ */
 function required(key) {
   const val = process.env[key];
   if (!val && process.env.NODE_ENV === 'production') {
     throw new Error(`Missing required environment variable: ${key}`);
   }
   return val ?? '';
+}
+
+/**
+ * Resolve a secret that MUST be present in production but may use a dev-only
+ * fallback otherwise. Throws at load time in production if unset.
+ *
+ * @param {string} key          Env var name.
+ * @param {string} devFallback  Value used only when NODE_ENV !== 'production'.
+ */
+function secret(key, devFallback) {
+  const val = process.env[key];
+  if (val) return val;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(`Missing required secret: ${key} (must be set in production)`);
+  }
+  return devFallback;
 }
 
 export const env = {
@@ -21,10 +42,10 @@ export const env = {
   useMemoryDb: process.env.USE_MEMORY_DB === 'true' || !process.env.MONGODB_URI,
   dbName: process.env.MONGODB_DB_NAME || 'takeawaypos',
 
-  // Auth
-  jwtSecret: process.env.JWT_SECRET ?? 'dev_secret_change_in_production',
+  // Auth — never silently fall back to a known default in production.
+  jwtSecret: secret('JWT_SECRET', 'dev_secret_change_in_production'),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '8h',
-  cookieSecret: process.env.COOKIE_SECRET || 'dev_cookie_secret',
+  cookieSecret: secret('COOKIE_SECRET', 'dev_cookie_secret'),
 
   // Redis (Upstash)
   redisUrl: process.env.REDIS_URL ?? '',
@@ -49,8 +70,8 @@ export const env = {
   // Google Maps
   googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY ?? '',
 
-  // Voice Agent
-  voiceAgentApiKey: process.env.VOICE_AGENT_API_KEY ?? 'dev_voice_agent_key',
+  // Voice Agent — service-to-service bearer; must be a real secret in production.
+  voiceAgentApiKey: secret('VOICE_AGENT_API_KEY', 'dev_voice_agent_key'),
   voiceAgentUrl: process.env.VOICE_AGENT_URL ?? 'http://localhost:8000',
 
   // Printer

@@ -1,5 +1,4 @@
 import MenuItem from '../models/MenuItem.js';
-import mongoose from 'mongoose';
 import Variation from '../models/Variation.js';
 import DeliveryZone from '../models/DeliveryZone.js';
 import Order from '../models/Order.js';
@@ -11,6 +10,10 @@ import stripePackage from 'stripe';
 import twilio from 'twilio';
 import { env } from '../config/env.js';
 import { compileKitchenTickets } from './orderController.js';
+import { nextOrderReference } from '../services/sequenceService.js';
+import { withTransaction } from '../services/transactionRunner.js';
+import { refundPayment } from '../services/refundService.js';
+import { checkIdempotency, setIdempotency } from '../config/redis.js';
 
 const stripe = env.stripeSecretKey ? stripePackage(env.stripeSecretKey) : null;
 const twilioClient = env.twilioAccountSid && env.twilioAuthToken ? twilio(env.twilioAccountSid, env.twilioAuthToken) : null;
@@ -222,6 +225,25 @@ export async function placeVoiceOrder(req, res, next) {
       return res.status(400).json({ error: 'Order type, customer details, and items array are required' });
     }
 
+    // --- Idempotency: derive key from header or call_sid ---
+    const idempotencyKey = req.headers['x-idempotency-key'] || (call_sid ? `voice:${call_sid}` : null);
+    if (idempotencyKey) {
+      const existingOrderId = await checkIdempotency(idempotencyKey);
+      if (existingOrderId) {
+        const existing = await Order.findOne({ _id: existingOrderId, tenant: req.tenantId });
+        if (existing) {
+          console.log(`🔄 Voice idempotency hit — returning existing order: ${existing.reference}`);
+          return res.json({
+            success: true,
+            orderReference: existing.reference,
+            totalPence: existing.totalPence,
+            orderId: existing._id.toString(),
+            duplicate: true,
+          });
+        }
+      }
+    }
+
     // 1. Calculate and map items to database lines
     let subtotalPence = 0;
     const processedLines = [];
@@ -356,13 +378,8 @@ export async function placeVoiceOrder(req, res, next) {
       vatPence += vatBreakdown[rate].vatPence;
     }
 
-    // 3. Create Unique Order Sequence reference
-    const todayStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const countToday = await Order.countDocuments({
-      tenant: req.tenantId,
-      createdAt: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) },
-    });
-    const reference = `ORD-${todayStr}-${String(countToday + 1).padStart(4, '0')}`;
+    // 3. Create Unique Order Sequence reference (atomic, race-safe)
+    const reference = await nextOrderReference(req.tenantId);
 
     // 4. Initial payment record
     const paymentMethodMap = {
@@ -377,66 +394,79 @@ export async function placeVoiceOrder(req, res, next) {
       status: 'pending',
     }];
 
-    // 5. Customer resolution
-    let customerId = null;
-    let dbCust = await Customer.findOne({ tenant: req.tenantId, phone: customer_phone.trim() });
-    if (!dbCust) {
-      dbCust = await Customer.create({
-        tenant: req.tenantId,
-        name: customer_name.trim(),
-        phone: customer_phone.trim(),
-        addresses: order_type === 'delivery' ? [{
-          line1: delivery_address,
-          postcode: delivery_postcode,
-          isDefault: true,
-        }] : [],
-      });
-    }
-    customerId = dbCust._id;
+    // --- Atomic persistence span: Customer upsert + Order.create + VoiceCallLog ---
+    const order = await withTransaction(async (session) => {
+      // Customer resolution
+      let customerId = null;
+      let dbCust = await Customer.findOne({ tenant: req.tenantId, phone: customer_phone.trim() }).session(session);
+      if (!dbCust) {
+        dbCust = await Customer.create([{
+          tenant: req.tenantId,
+          name: customer_name.trim(),
+          phone: customer_phone.trim(),
+          addresses: order_type === 'delivery' ? [{
+            line1: delivery_address,
+            postcode: delivery_postcode,
+            isDefault: true,
+          }] : [],
+        }], { session });
+        dbCust = dbCust[0];
+      }
+      customerId = dbCust._id;
 
-    // 6. Create Order
-    const order = await Order.create({
-      tenant: req.tenantId,
-      reference,
-      channel: 'voice-agent',
-      orderType: order_type,
-      status: 'placed',
-      customer: {
-        name: customer_name,
-        phone: customer_phone,
-        customerId,
-        address: order_type === 'delivery' ? {
-          line1: delivery_address,
-          postcode: delivery_postcode,
-        } : undefined,
-      },
-      estimatedReadyAt: new Date(Date.now() + 25 * 60_000),
-      lines: processedLines,
-      payments,
-      deliveryZoneId,
-      deliveryChargePence,
-      subtotalPence,
-      vatBreakdown,
-      vatPence,
-      totalPence,
-      voiceCallSid: call_sid,
-      notes,
-      statusHistory: [{ status: 'placed' }],
+      // Create Order
+      const createdOrder = (await Order.create([{
+        tenant: req.tenantId,
+        reference,
+        idempotencyKey: idempotencyKey || undefined,
+        channel: 'voice-agent',
+        orderType: order_type,
+        status: 'placed',
+        customer: {
+          name: customer_name,
+          phone: customer_phone,
+          customerId,
+          address: order_type === 'delivery' ? {
+            line1: delivery_address,
+            postcode: delivery_postcode,
+          } : undefined,
+        },
+        estimatedReadyAt: new Date(Date.now() + 25 * 60_000),
+        lines: processedLines,
+        payments,
+        deliveryZoneId,
+        deliveryChargePence,
+        subtotalPence,
+        vatBreakdown,
+        vatPence,
+        totalPence,
+        voiceCallSid: call_sid,
+        notes,
+        statusHistory: [{ status: 'placed' }],
+      }], { session }))[0];
+
+      // Log Voice Call
+      if (call_sid) {
+        await VoiceCallLog.create([{
+          tenant: req.tenantId,
+          callSid: call_sid,
+          callerNumber: customer_phone,
+          status: 'completed',
+          orderId: createdOrder._id,
+          orderReference: createdOrder.reference,
+        }], { session });
+      }
+
+      return createdOrder;
     });
+    // --- End persistence span ---
 
-    // 7. Log Voice Call
-    if (call_sid) {
-      await VoiceCallLog.create({
-        tenant: req.tenantId,
-        callSid: call_sid,
-        callerNumber: customer_phone,
-        status: 'completed',
-        orderId: order._id,
-        orderReference: order.reference,
-      });
+    // Set idempotency key in Redis for future fast lookups
+    if (idempotencyKey) {
+      await setIdempotency(idempotencyKey, order._id.toString(), 86400);
     }
 
-    // Compile and print kitchen ticket
+    // --- Post-commit side effects (non-critical, fire-and-forget where possible) ---
     const ticketText = compileKitchenTickets(order, 'AI_VOICE_AGENT');
     console.log('--- KITCHEN TICKET FOR VOICE ORDER ---');
     console.log(ticketText);
@@ -469,6 +499,20 @@ export async function placeVoiceOrder(req, res, next) {
       orderId: order._id.toString(),
     });
   } catch (err) {
+    // E11000 on idempotencyKey unique index — duplicate slipped through Redis check
+    if (err.code === 11000 && idempotencyKey) {
+      const existing = await Order.findOne({ tenant: req.tenantId, idempotencyKey });
+      if (existing) {
+        await setIdempotency(idempotencyKey, existing._id.toString(), 86400);
+        return res.json({
+          success: true,
+          orderReference: existing.reference,
+          totalPence: existing.totalPence,
+          orderId: existing._id.toString(),
+          duplicate: true,
+        });
+      }
+    }
     next(err);
   }
 }
@@ -641,29 +685,20 @@ export async function cancelVoiceOrder(req, res, next) {
     order.statusHistory.push({ status: 'cancelled', changedBy: null });
     order.notes = `${order.notes || ''} [Voice Cancelled: ${reason || 'No reason given'}]`;
 
-    // Process refunds for stripe payment
+    // Process refunds via shared service — full refund on each paid payment
     for (const p of order.payments) {
-      if (p.status === 'paid' && p.method === 'stripe' && p.stripePaymentIntentId && stripe) {
-        try {
-          const refund = await stripe.refunds.create({
-            payment_intent: p.stripePaymentIntentId,
-            reason: 'requested_by_customer',
-          });
-          order.refundHistory.push({
-            amountPence: p.amountPence,
-            reason: `Voice Cancellation refund: ${reason || 'Requested by customer via voice'}`,
-            stripeRefundId: refund.id,
-          });
-          p.status = 'refunded';
-        } catch (sErr) {
-          console.error('Stripe refund failed:', sErr);
+      if (p.status === 'paid' || p.status === 'partially_refunded') {
+        const refundable = p.amountPence - (p.refundedPence || 0);
+        if (refundable > 0) {
+          try {
+            await refundPayment(order, p, refundable, {
+              reason: `Voice Cancellation refund: ${reason || 'Requested by customer via voice'}`,
+              stripe,
+            });
+          } catch (sErr) {
+            console.error('Refund failed during voice cancel:', sErr.message);
+          }
         }
-      } else if (p.status === 'paid') {
-        p.status = 'refunded';
-        order.refundHistory.push({
-          amountPence: p.amountPence,
-          reason: `Voice Cancellation refund: ${reason || 'Order cancelled'}`,
-        });
       }
     }
 
@@ -1093,86 +1128,6 @@ export async function sendVoiceBillSms(req, res, next) {
     }
     
     res.json({ success: true, smsSent });
-  } catch (err) {
-    next(err);
-  }
-}
-
-export async function getDebugCalls(req, res, next) {
-  try {
-    const db = mongoose.connection.db;
-    const collections = await db.listCollections().toArray();
-    
-    let dbList = [];
-    try {
-      const client = mongoose.connection.getClient();
-      const adminDb = client.db().admin();
-      const result = await adminDb.listDatabases();
-      dbList = result.databases.map(d => d.name);
-    } catch (dbErr) {
-      dbList = ["error", dbErr.message];
-    }
-
-    // Fetch last 10 orders
-    const voiceOrders = await db.collection('orders')
-      .find({})
-      .sort({ createdAt: -1 })
-      .limit(10)
-      .toArray();
-
-    // Fetch last 10 voice call logs
-    const voiceCallLogs = await db.collection('voicecalllogs')
-      .find({})
-      .sort({ createdAt: -1 })
-      .limit(10)
-      .toArray();
-
-    // Fetch last 10 call recordings (if any exist)
-    let callRecordings = [];
-    if (collections.some(c => c.name === 'callRecordings')) {
-      callRecordings = await db.collection('callRecordings')
-        .find({})
-        .sort({ createdAt: -1 })
-        .limit(10)
-        .toArray();
-    }
-    
-    // Connect to the other database cluster where the voice agent might be saving recordings
-    let otherDbInfo = null;
-    try {
-      const otherConn = await mongoose.createConnection("mongodb+srv://myappuser:4c9SdOvhZNfj5TSr@cluster0.5upg0oe.mongodb.net/aimate?appName=Cluster0").asPromise();
-      const otherDb = otherConn.db;
-      const otherCollections = await otherDb.listCollections().toArray();
-      const otherCallRecordings = await otherDb.collection('callRecordings')
-        .find()
-        .sort({ createdAt: -1 })
-        .limit(10)
-        .toArray();
-      otherDbInfo = {
-        connected: true,
-        dbName: otherConn.name,
-        collections: otherCollections.map(c => c.name),
-        callRecordings: otherCallRecordings
-      };
-      await otherConn.close();
-    } catch (otherErr) {
-      otherDbInfo = {
-        connected: false,
-        error: otherErr.message
-      };
-    }
-    
-    res.json({
-      success: true,
-      dbName: mongoose.connection.name,
-      mongoUriHost: env.mongoUri ? env.mongoUri.split('@').pop() : '',
-      dbList,
-      collections: collections.map(c => c.name),
-      voiceOrders,
-      voiceCallLogs,
-      callRecordings,
-      otherDbInfo
-    });
   } catch (err) {
     next(err);
   }

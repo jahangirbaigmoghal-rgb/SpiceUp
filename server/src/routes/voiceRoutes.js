@@ -8,7 +8,6 @@ import {
   cancelVoiceOrder,
   modifyVoiceOrder,
   sendVoiceBillSms,
-  getDebugCalls,
   calculateVoicePrice,
 } from '../controllers/voiceController.js';
 import { requireVoiceAgentKey } from '../middleware/auth.js';
@@ -24,9 +23,6 @@ import {
 } from '../schemas/voiceSchema.js';
 
 export const voiceRoutes = Router();
-
-// Public debug route for diagnostics
-voiceRoutes.get('/debug-calls', getDebugCalls);
 
 // Apply the voice agent API key check to all internal voice routes
 voiceRoutes.use(requireVoiceAgentKey);

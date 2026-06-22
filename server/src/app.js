@@ -2,7 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
-import mongoose from 'mongoose';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { env } from './config/env.js';
@@ -38,11 +37,14 @@ app.use(cors({
     env.posUrl,
     env.adminUrl,
     env.kdsUrl,
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'http://localhost:3002',
-    'http://localhost:3003',
-  ],
+    // Local dev origins only — never exposed in production.
+    ...(env.isDevelopment ? [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://localhost:3002',
+      'http://localhost:3003',
+    ] : []),
+  ].filter(Boolean),
   credentials: true,
 }));
 
@@ -71,38 +73,6 @@ app.get('/api/health', (_req, res) => res.json({
   version: '1.0.0',
   timestamp: new Date().toISOString(),
 }));
-
-app.get('/api/debug-db-temp', async (req, res) => {
-  try {
-    const db = mongoose.connection.db;
-    const collections = await db.listCollections().toArray();
-    const colNames = collections.map(c => c.name);
-    
-    // Find all bhuna/balti items in database
-    const bhunaBalti = await db.collection('menuitems').find({
-      name: { $regex: /bhuna|balti/i }
-    }).toArray();
-    
-    // Find first 5 menu items
-    const first5 = await db.collection('menuitems').find({}).limit(5).toArray();
-    
-    // Mask URI
-    let maskedUri = 'not_set';
-    if (process.env.MONGODB_URI) {
-      maskedUri = process.env.MONGODB_URI.replace(/\/\/([^:]+):([^@]+)@/, '//xxxx:xxxx@');
-    }
-    
-    res.json({
-      database: mongoose.connection.name,
-      mongoUri: maskedUri,
-      collections: colNames,
-      bhunaBaltiItems: bhunaBalti,
-      first5Items: first5,
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
 // ─── Tenant Middleware ───────────────────────────────────────────────────────
 // Applied to all /api routes to set req.tenantId

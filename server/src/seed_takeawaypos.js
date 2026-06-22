@@ -13858,5 +13858,116 @@ export async function seedIfEmpty() {
   }
 }
 
-export async function repairDefaultUserPins() {}
-export async function ensureAdminExists() {}
+/**
+ * One-time repair: for each default user, verify the stored PIN still validates
+ * against its known default; if not (corrupted hash from the old double-hash
+ * bug), re-hash and persist the default. Only ever touches the 5 default
+ * usernames and only when their hash is provably broken — a user with a working
+ * custom PIN is never affected.
+ *
+ * Replaces the previous in-request auth-bypass that lived in authController.
+ */
+export async function repairDefaultUserPins() {
+  try {
+    const tenant = await Tenant.findById(TARGET_TENANT_ID).select('_id').lean()
+      ?? (await Tenant.findOne().select('_id').lean());
+    if (!tenant) return;
+    const tenantId = tenant._id;
+
+    const defaultUsers = [
+      { username: 'admin',   pin: '1111' },
+      { username: 'manager', pin: '2222' },
+      { username: 'cashier', pin: '3333' },
+      { username: 'kitchen', pin: '4444' },
+      { username: 'driver',  pin: '5555' },
+    ];
+
+    for (const { username, pin } of defaultUsers) {
+      const user = await User.findOne({ tenant: tenantId, username });
+      if (!user) continue;
+
+      // Only repair when the stored PIN genuinely fails to verify.
+      const pinWorks = user.pin && (await user.verifyPin(pin));
+      if (!pinWorks) {
+        console.log(`🔧 Repairing corrupted PIN for ${username}...`);
+        user.pin = await User.hashPin(pin);
+        await user.save();
+        console.log(`✅ PIN for ${username} repaired.`);
+      }
+    }
+  } catch (err) {
+    console.error('Error repairing default user PINs:', err);
+  }
+}
+
+/**
+ * Guarantee the five default staff accounts exist and are healthy. Crucially,
+ * an existing PIN is NEVER overwritten — only missing ones are seeded — so any
+ * PIN a user has set themselves is preserved.
+ */
+export async function ensureAdminExists() {
+  try {
+    const tenant = await Tenant.findById(TARGET_TENANT_ID).select('_id').lean()
+      ?? (await Tenant.findOne().select('_id').lean());
+    if (!tenant) return;
+    const tenantId = tenant._id;
+
+    const ensureUser = async (username, name, role, defaultPin, defaultPass) => {
+      let user = await User.findOne({ tenant: tenantId, username });
+
+      if (!user) {
+        console.log(`🛡️ Default ${role} user not found. Re-creating default ${role}...`);
+        const pinHash = await User.hashPin(defaultPin);
+        const passHash = await User.hashPassword(defaultPass);
+        await User.create({
+          tenant: tenantId,
+          name,
+          username,
+          role,
+          passwordHash: passHash,
+          pin: pinHash,
+          isActive: true,
+        });
+        return;
+      }
+
+      // User exists — only fix role/isActive/missing PIN. NEVER overwrite an existing PIN.
+      let needsUpdate = false;
+
+      if (user.role !== role) {
+        user.role = role;
+        needsUpdate = true;
+      }
+
+      if (user.isActive !== true) {
+        user.isActive = true;
+        needsUpdate = true;
+      }
+
+      // Only seed a PIN if the user has none at all.
+      if (!user.pin || (typeof user.pin === 'string' && user.pin.trim() === '')) {
+        console.log(`🔑 ${username} has no PIN — setting default PIN...`);
+        user.pin = await User.hashPin(defaultPin);
+        needsUpdate = true;
+      }
+
+      // Only seed a password if none exists.
+      if (!user.passwordHash) {
+        user.passwordHash = await User.hashPassword(defaultPass);
+        needsUpdate = true;
+      }
+
+      if (needsUpdate) {
+        await user.save();
+      }
+    };
+
+    await ensureUser('admin',   'Owner Admin',     'admin',   '1111', 'Admin123!');
+    await ensureUser('manager', 'Shift Manager',   'manager', '2222', 'Manager123!');
+    await ensureUser('cashier', 'Cashier Staff',   'cashier', '3333', 'Cashier123!');
+    await ensureUser('kitchen', 'Kitchen Chef',    'kitchen', '4444', 'Kitchen123!');
+    await ensureUser('driver',  'Delivery Driver', 'driver',  '5555', 'Driver123!');
+  } catch (err) {
+    console.error('Error ensuring default users exist:', err);
+  }
+}

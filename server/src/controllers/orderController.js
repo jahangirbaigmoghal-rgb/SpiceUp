@@ -11,8 +11,12 @@ import Bundle from '../models/Bundle.js';
 import Label from '../models/Label.js';
 import Setting from '../models/Setting.js';
 import { audit } from '../utils/audit.js';
+import { checkIdempotency, setIdempotency } from '../config/redis.js';
 import { printCustomerReceipt, printKitchenTickets, printTokenReceipt } from '../services/printerService.js';
 import { emitNewOrder, emitOrderStatusUpdate } from '../config/socket.js';
+import { nextOrderReference } from '../services/sequenceService.js';
+import { withTransaction } from '../services/transactionRunner.js';
+import { refundPayment } from '../services/refundService.js';
 import stripePackage from 'stripe';
 import PDFDocument from 'pdfkit';
 import { env } from '../config/env.js';
@@ -600,10 +604,14 @@ export async function createOrder(req, res, next) {
     const idempotencyKey = req.headers['x-idempotency-key'];
 
     if (idempotencyKey) {
-      const existing = await Order.findOne({ tenant: req.tenantId, idempotencyKey });
-      if (existing) {
-        console.log(`ΓÖ╗∩╕Å Idempotency triggered ΓÇö returning existing order: ${existing.reference}`);
-        return res.json({ order: existing, duplicate: true });
+      // Race-safe check: Redis SETNX (instant, no DB round-trip).
+      const existingOrderId = await checkIdempotency(idempotencyKey);
+      if (existingOrderId) {
+        const existing = await Order.findOne({ _id: existingOrderId, tenant: req.tenantId });
+        if (existing) {
+          console.log(`🔄 Idempotency hit (Redis) — returning existing order: ${existing.reference}`);
+          return res.json({ order: existing, duplicate: true });
+        }
       }
     }
 
@@ -814,12 +822,7 @@ export async function createOrder(req, res, next) {
       }
     }
 
-    const todayStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const countToday = await Order.countDocuments({
-      tenant: req.tenantId,
-      createdAt: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) },
-    });
-    const reference = `ORD-${todayStr}-${String(countToday + 1).padStart(4, '0')}`;
+    const reference = await nextOrderReference(req.tenantId);
 
     const initialPayments = [];
     if (paymentMethod) {
@@ -831,59 +834,71 @@ export async function createOrder(req, res, next) {
       });
     }
 
-    let customerId = null;
-    if (customer.phone) {
-      let dbCust = await Customer.findOne({ tenant: req.tenantId, phone: customer.phone.trim() });
-      if (!dbCust) {
-        dbCust = await Customer.create({
-          tenant: req.tenantId,
-          name: customer.name.trim(),
-          phone: customer.phone.trim(),
-          email: customer.email ? customer.email.toLowerCase().trim() : undefined,
-          addresses: customer.address ? [{ ...customer.address, isDefault: true }] : [],
-        });
-      }
-      customerId = dbCust._id;
-    }
-
+    // Resolve staff name (read-only, safe outside transaction)
     let staffUsername = 'Cashier';
     if (req.userId) {
       const user = await User.findById(req.userId);
       if (user) staffUsername = user.username;
     }
 
-    const order = await Order.create({
-      tenant: req.tenantId,
-      reference,
-      idempotencyKey,
-      channel: channel || 'pos-walkin',
-      orderType,
-      status: 'placed',
-      customer: {
-        ...customer,
-        customerId,
-      },
-      tableNumber,
-      scheduledFor,
-      estimatedReadyAt: scheduledFor || new Date(Date.now() + 25 * 60_000),
-      lines: processedLines,
-      payments: initialPayments,
-      promoCode,
-      discountPence,
-      discountReason: appliedPromo ? appliedPromo.name : undefined,
-      deliveryZoneId,
-      deliveryChargePence,
-      subtotalPence,
-      vatBreakdown,
-      vatPence,
-      totalPence,
-      staffId: req.userId,
-      terminalId,
-      voiceCallSid,
-      notes,
-      statusHistory: [{ status: 'placed', changedBy: req.userId }],
-    });
+    // --- Atomic persistence span: Customer upsert + Order.create ---
+    const order = await withTransaction(async (session) => {
+      let customerId = null;
+      if (customer.phone) {
+        let dbCust = await Customer.findOne({ tenant: req.tenantId, phone: customer.phone.trim() }).session(session);
+        if (!dbCust) {
+          dbCust = await Customer.create([{
+            tenant: req.tenantId,
+            name: customer.name.trim(),
+            phone: customer.phone.trim(),
+            email: customer.email ? customer.email.toLowerCase().trim() : undefined,
+            addresses: customer.address ? [{ ...customer.address, isDefault: true }] : [],
+          }], { session });
+          dbCust = dbCust[0];
+        }
+        customerId = dbCust._id;
+      }
 
+      return (await Order.create([{
+        tenant: req.tenantId,
+        reference,
+        idempotencyKey,
+        channel: channel || 'pos-walkin',
+        orderType,
+        status: 'placed',
+        customer: {
+          ...customer,
+          customerId,
+        },
+        tableNumber,
+        scheduledFor,
+        estimatedReadyAt: scheduledFor || new Date(Date.now() + 25 * 60_000),
+        lines: processedLines,
+        payments: initialPayments,
+        promoCode,
+        discountPence,
+        discountReason: appliedPromo ? appliedPromo.name : undefined,
+        deliveryZoneId,
+        deliveryChargePence,
+        subtotalPence,
+        vatBreakdown,
+        vatPence,
+        totalPence,
+        staffId: req.userId,
+        terminalId,
+        voiceCallSid,
+        notes,
+        statusHistory: [{ status: 'placed', changedBy: req.userId }],
+      }], { session }))[0];
+    });
+    // --- End persistence span ---
+
+    // Set idempotency key in Redis for future fast lookups
+    if (idempotencyKey) {
+      await setIdempotency(idempotencyKey, order._id.toString(), 86400);
+    }
+
+    // --- Post-commit side effects (non-critical, fire-and-forget where possible) ---
     const settings = await Setting.findOne({ tenant: req.tenantId });
     if (settings && settings.printerEnabled) {
       if (settings.printCustomerReceipt) {
@@ -902,6 +917,15 @@ export async function createOrder(req, res, next) {
 
     res.status(201).json({ order, kitchenTicket: ticketText });
   } catch (err) {
+    // E11000 on idempotencyKey unique index — a duplicate slipped through the
+    // Redis check (race window or Redis unavailable). Return the existing order.
+    if (err.code === 11000 && idempotencyKey) {
+      const existing = await Order.findOne({ tenant: req.tenantId, idempotencyKey });
+      if (existing) {
+        await setIdempotency(idempotencyKey, existing._id.toString(), 86400);
+        return res.json({ order: existing, duplicate: true });
+      }
+    }
     if (err instanceof Error && !err.status && !err.statusCode) {
       err.status = 400;
     }
@@ -988,32 +1012,21 @@ export async function cancelOrder(req, res, next) {
     order.statusHistory.push({ status: 'cancelled', changedBy: req.userId });
     order.notes = `${order.notes || ''} [Cancelled: ${reason || 'No reason given'}]`;
 
-    // Process Stripe refund if paid online
+    // Process refunds via shared service — full refund on each paid payment
     for (const p of order.payments) {
-      if (p.status === 'paid' && p.method === 'stripe' && p.stripePaymentIntentId && stripe) {
-        try {
-          const refund = await stripe.refunds.create({
-            payment_intent: p.stripePaymentIntentId,
-            reason: 'requested_by_customer',
-          });
-          order.refundHistory.push({
-            amountPence: p.amountPence,
-            reason: `Cancellation refund: ${reason || 'Order cancelled by staff'}`,
-            stripeRefundId: refund.id,
-            refundedBy: req.userId,
-          });
-          p.status = 'refunded';
-        } catch (sErr) {
-          console.error('Stripe refund failed:', sErr);
+      if (p.status === 'paid' || p.status === 'partially_refunded') {
+        const refundable = p.amountPence - (p.refundedPence || 0);
+        if (refundable > 0) {
+          try {
+            await refundPayment(order, p, refundable, {
+              reason: `Cancellation refund: ${reason || 'Order cancelled by staff'}`,
+              stripe,
+              actorId: req.userId,
+            });
+          } catch (sErr) {
+            console.error('Refund failed during cancel:', sErr.message);
+          }
         }
-      } else if (p.status === 'paid') {
-        // Mark cash/card local refunds as refunded
-        p.status = 'refunded';
-        order.refundHistory.push({
-          amountPence: p.amountPence,
-          reason: `Cancellation refund: ${reason || 'Order cancelled'}`,
-          refundedBy: req.userId,
-        });
       }
     }
 
@@ -1044,35 +1057,23 @@ export async function refundOrder(req, res, next) {
 
     const before = order.toObject();
 
-    // Deduct and process refund on Stripe if possible
-    const stripePayment = order.payments.find(p => p.method === 'stripe' && p.status === 'paid');
-    let refundId = null;
+    // Find the target payment — prefer Stripe-paid, then any paid payment
+    const stripePayment = order.payments.find(p => (p.status === 'paid' || p.status === 'partially_refunded') && p.method === 'stripe');
+    const targetPayment = stripePayment || order.payments.find(p => p.status === 'paid' || p.status === 'partially_refunded');
 
-    if (stripePayment && stripe) {
-      try {
-        const refund = await stripe.refunds.create({
-          payment_intent: stripePayment.stripePaymentIntentId,
-          amount: amountPence,
-        });
-        refundId = refund.id;
-        stripePayment.status = 'refunded';
-      } catch (stripeErr) {
-        return res.status(400).json({ error: `Stripe refund failed: ${stripeErr.message}` });
-      }
-    } else {
-      // Local payment refund
-      const activePay = order.payments.find(p => p.status === 'paid');
-      if (activePay) {
-        activePay.status = 'refunded';
-      }
+    if (!targetPayment) {
+      return res.status(400).json({ error: 'No refundable payment found on this order' });
     }
 
-    order.refundHistory.push({
-      amountPence,
-      reason,
-      stripeRefundId: refundId,
-      refundedBy: req.userId,
-    });
+    try {
+      await refundPayment(order, targetPayment, amountPence, {
+        reason,
+        stripe,
+        actorId: req.userId,
+      });
+    } catch (stripeErr) {
+      return res.status(400).json({ error: `Refund failed: ${stripeErr.message}` });
+    }
 
     await order.save();
 

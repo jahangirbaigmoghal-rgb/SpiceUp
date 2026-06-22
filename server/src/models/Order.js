@@ -100,9 +100,10 @@ const paymentSchema = new mongoose.Schema({
   stripePaymentLinkId: String,
   status: {
     type: String,
-    enum: ['pending', 'paid', 'failed', 'refunded'],
+    enum: ['pending', 'paid', 'failed', 'refunded', 'partially_refunded'],
     default: 'pending',
   },
+  refundedPence: { type: Number, default: 0 },
   paidAt: Date,
 });
 

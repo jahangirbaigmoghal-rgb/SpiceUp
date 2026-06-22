@@ -133,9 +133,15 @@ export async function handleStripeWebhook(req, res, next) {
   let event;
 
   try {
-    // If webhook signature or stripe object is missing, fallback directly to JSON body for dev ease
+    // Security: NEVER accept unsigned/unsigned-verified webhook bodies in production.
+    // Missing Stripe key, webhook secret, or signature → hard fail. This prevents
+    // forged payment notifications from marking orders as paid.
     if (!stripe || !env.stripeWebhookSecret || !sig) {
-      console.log('⚠️ Stripe webhook signature verification skipped (Dev fallback)');
+      if (env.isProduction) {
+        console.error('❌ Stripe webhook rejected: Stripe not fully configured in production');
+        return res.status(401).json({ error: 'Webhook signature verification required but Stripe is not configured' });
+      }
+      console.log('⚠️ Stripe webhook signature verification skipped (dev fallback)');
       event = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
     } else {
       event = stripe.webhooks.constructEvent(req.body, sig, env.stripeWebhookSecret);
