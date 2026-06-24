@@ -15,6 +15,8 @@ const bundleSchema = new mongoose.Schema({
   bundlePricePence: { type: Number, required: true }, // Fixed target price (e.g. 1099 for £10.99)
   components: [componentSlotSchema],
   isActive: { type: Boolean, default: true },
+  backgroundColor: { type: String, default: '#1e293b' },
+  textColor: { type: String, default: '#ffffff' },
 }, { timestamps: true });
 
 bundleSchema.index({ tenant: 1, isActive: 1 });

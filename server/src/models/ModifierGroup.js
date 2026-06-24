@@ -52,6 +52,8 @@ const modifierGroupSchema = new mongoose.Schema({
   maxSelections: { type: Number, default: 1 },
   options:   [modifierOptionSchema],
   isActive:  { type: Boolean, default: true },
+  backgroundColor: { type: String, default: '#1e293b' },
+  textColor: { type: String, default: '#ffffff' },
 }, { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } });
 
 modifierGroupSchema.virtual('minSelection').get(function() {

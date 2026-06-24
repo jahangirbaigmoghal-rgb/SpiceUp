@@ -13442,6 +13442,200 @@ export async function seed() {
     textColor: "#ffffff"
   });
 
+  // --- BUNDLES / DEALS (per TakeaayPOS_Menu Items.md) ---
+  console.log('🍱 Seeding bundle deals...');
+  await Bundle.create([
+    // Pizza BOGO deals (Buy Any 2 Get 1 Free)
+    {
+      tenant: tenantId, name: 'Buy Any 2x 7" Pizza Get 1 Free', bundlePricePence: 560,
+      description: 'Buy any two 7" pizzas and get a third 7" pizza free.',
+      backgroundColor: '#ea580c', textColor: '#ffffff', isActive: true,
+      components: [
+        { label: 'Pizza 1', allowedCategoryIds: [cat_pizzas._id], minChoices: 1, maxChoices: 1, required: true },
+        { label: 'Pizza 2', allowedCategoryIds: [cat_pizzas._id], minChoices: 1, maxChoices: 1, required: true },
+        { label: 'Free Pizza', allowedCategoryIds: [cat_pizzas._id], minChoices: 1, maxChoices: 1, required: true },
+      ],
+    },
+    {
+      tenant: tenantId, name: 'Buy Any 2x 9" Pizza Get 1 Free', bundlePricePence: 740,
+      description: 'Buy any two 9" pizzas and get a third 9" pizza free.',
+      backgroundColor: '#ea580c', textColor: '#ffffff', isActive: true,
+      components: [
+        { label: 'Pizza 1', allowedCategoryIds: [cat_pizzas._id], minChoices: 1, maxChoices: 1, required: true },
+        { label: 'Pizza 2', allowedCategoryIds: [cat_pizzas._id], minChoices: 1, maxChoices: 1, required: true },
+        { label: 'Free Pizza', allowedCategoryIds: [cat_pizzas._id], minChoices: 1, maxChoices: 1, required: true },
+      ],
+    },
+    {
+      tenant: tenantId, name: 'Buy Any 2x 12" Pizza Get 1 Free', bundlePricePence: 1190,
+      description: 'Buy any two 12" pizzas and get a third 12" pizza free.',
+      backgroundColor: '#ea580c', textColor: '#ffffff', isActive: true,
+      components: [
+        { label: 'Pizza 1', allowedCategoryIds: [cat_pizzas._id], minChoices: 1, maxChoices: 1, required: true },
+        { label: 'Pizza 2', allowedCategoryIds: [cat_pizzas._id], minChoices: 1, maxChoices: 1, required: true },
+        { label: 'Free Pizza', allowedCategoryIds: [cat_pizzas._id], minChoices: 1, maxChoices: 1, required: true },
+      ],
+    },
+    {
+      tenant: tenantId, name: 'Buy Any 2x 16" Pizza Get 1 Free', bundlePricePence: 1380,
+      description: 'Buy any two 16" pizzas and get a third 16" pizza free.',
+      backgroundColor: '#ea580c', textColor: '#ffffff', isActive: true,
+      components: [
+        { label: 'Pizza 1', allowedCategoryIds: [cat_pizzas._id], minChoices: 1, maxChoices: 1, required: true },
+        { label: 'Pizza 2', allowedCategoryIds: [cat_pizzas._id], minChoices: 1, maxChoices: 1, required: true },
+        { label: 'Free Pizza', allowedCategoryIds: [cat_pizzas._id], minChoices: 1, maxChoices: 1, required: true },
+      ],
+    },
+    // Multi-pizza offers
+    {
+      tenant: tenantId, name: 'Any 2x 9" Pizzas', bundlePricePence: 1400,
+      description: 'Choose any two 9-inch pizzas.',
+      backgroundColor: '#f59e0b', textColor: '#ffffff', isActive: true,
+      components: [
+        { label: 'Pizza 1', allowedCategoryIds: [cat_pizzas._id], minChoices: 1, maxChoices: 1, required: true },
+        { label: 'Pizza 2', allowedCategoryIds: [cat_pizzas._id], minChoices: 1, maxChoices: 1, required: true },
+      ],
+    },
+    {
+      tenant: tenantId, name: 'Any 2x 12" Pizzas', bundlePricePence: 2400,
+      description: 'Choose any two 12-inch pizzas.',
+      backgroundColor: '#f59e0b', textColor: '#ffffff', isActive: true,
+      components: [
+        { label: 'Pizza 1', allowedCategoryIds: [cat_pizzas._id], minChoices: 1, maxChoices: 1, required: true },
+        { label: 'Pizza 2', allowedCategoryIds: [cat_pizzas._id], minChoices: 1, maxChoices: 1, required: true },
+      ],
+    },
+    {
+      tenant: tenantId, name: 'Any 2x 16" Pizzas', bundlePricePence: 2800,
+      description: 'Choose any two 16-inch pizzas.',
+      backgroundColor: '#f59e0b', textColor: '#ffffff', isActive: true,
+      components: [
+        { label: 'Pizza 1', allowedCategoryIds: [cat_pizzas._id], minChoices: 1, maxChoices: 1, required: true },
+        { label: 'Pizza 2', allowedCategoryIds: [cat_pizzas._id], minChoices: 1, maxChoices: 1, required: true },
+      ],
+    },
+    // Weekday pizza + drink deal
+    {
+      tenant: tenantId, name: 'Weekday Deal: 7" Pizza With Pepsi Can', bundlePricePence: 499,
+      description: 'Any 7-inch pizza with a Pepsi can — weekday only.',
+      backgroundColor: '#22c55e', textColor: '#ffffff', isActive: true,
+      components: [
+        { label: 'Pizza', allowedCategoryIds: [cat_pizzas._id], minChoices: 1, maxChoices: 1, required: true },
+        { label: 'Drink', allowedCategoryIds: [], minChoices: 1, maxChoices: 1, required: true },
+      ],
+    },
+    // Pizza meal deals
+    {
+      tenant: tenantId, name: 'Pizza Meal Deal 1', bundlePricePence: 1050,
+      description: 'Any 7" pizza + onion rings + doner meat + chips.',
+      backgroundColor: '#3b82f6', textColor: '#ffffff', isActive: true,
+      components: [
+        { label: 'Pizza', allowedCategoryIds: [cat_pizzas._id], minChoices: 1, maxChoices: 1, required: true },
+        { label: 'Side 1', allowedCategoryIds: [cat_sides._id], minChoices: 1, maxChoices: 1, required: true },
+        { label: 'Side 2', allowedCategoryIds: [cat_sides._id], minChoices: 1, maxChoices: 1, required: true },
+      ],
+    },
+    {
+      tenant: tenantId, name: 'Pizza Meal Deal 2', bundlePricePence: 2200,
+      description: 'Any 12" pizza + garlic baguette + doner meat + chips + onion rings.',
+      backgroundColor: '#3b82f6', textColor: '#ffffff', isActive: true,
+      components: [
+        { label: 'Pizza', allowedCategoryIds: [cat_pizzas._id], minChoices: 1, maxChoices: 1, required: true },
+        { label: 'Garlic Bread', allowedCategoryIds: [cat_garlic_baguette._id], minChoices: 1, maxChoices: 1, required: true },
+        { label: 'Side', allowedCategoryIds: [cat_sides._id], minChoices: 1, maxChoices: 1, required: true },
+      ],
+    },
+    {
+      tenant: tenantId, name: 'Pizza Meal Deal 3', bundlePricePence: 2390,
+      description: 'Any 16" pizza + doner meat + chips + onion rings.',
+      backgroundColor: '#3b82f6', textColor: '#ffffff', isActive: true,
+      components: [
+        { label: 'Pizza', allowedCategoryIds: [cat_pizzas._id], minChoices: 1, maxChoices: 1, required: true },
+        { label: 'Side', allowedCategoryIds: [cat_sides._id], minChoices: 1, maxChoices: 2, required: true },
+      ],
+    },
+    // Rup Express Nan deals
+    {
+      tenant: tenantId, name: 'Rup Express Nan 1', bundlePricePence: 1090,
+      description: '7" box: 1pc chicken, doner meat, chicken doner, shish in naan + chips.',
+      backgroundColor: '#a855f7', textColor: '#ffffff', isActive: true,
+      components: [
+        { label: 'Kebab', allowedCategoryIds: [cat_kebabs._id], minChoices: 1, maxChoices: 1, required: true },
+        { label: 'Side', allowedCategoryIds: [cat_sides._id], minChoices: 1, maxChoices: 1, required: true },
+      ],
+    },
+    {
+      tenant: tenantId, name: 'Rup Express Nan 2', bundlePricePence: 2200,
+      description: '9" box: 2pc chicken, doner meat, chicken doner, 3pc shish in naan + chips.',
+      backgroundColor: '#a855f7', textColor: '#ffffff', isActive: true,
+      components: [
+        { label: 'Kebab', allowedCategoryIds: [cat_kebabs._id], minChoices: 1, maxChoices: 1, required: true },
+        { label: 'Side', allowedCategoryIds: [cat_sides._id], minChoices: 1, maxChoices: 1, required: true },
+      ],
+    },
+    // Kebab box deals
+    {
+      tenant: tenantId, name: 'Chicken Tikka Doner Box', bundlePricePence: 1250,
+      description: 'Chicken tikka doner served in a loaded box.',
+      backgroundColor: '#ec4899', textColor: '#ffffff', isActive: true,
+      components: [
+        { label: 'Kebab', allowedCategoryIds: [cat_kebab_box_deals._id], minChoices: 1, maxChoices: 1, required: true },
+      ],
+    },
+    {
+      tenant: tenantId, name: 'Mixed Grill Box', bundlePricePence: 1400,
+      description: 'Mixed grill selection served in a loaded box.',
+      backgroundColor: '#ec4899', textColor: '#ffffff', isActive: true,
+      components: [
+        { label: 'Kebab', allowedCategoryIds: [cat_kebab_box_deals._id], minChoices: 1, maxChoices: 1, required: true },
+      ],
+    },
+    // Value packs / meal deals
+    {
+      tenant: tenantId, name: 'Burger Special', bundlePricePence: 950,
+      description: 'Burger meal special with sides.',
+      backgroundColor: '#10b981', textColor: '#ffffff', isActive: true,
+      components: [
+        { label: 'Burger', allowedCategoryIds: [cat_burgers._id], minChoices: 1, maxChoices: 1, required: true },
+        { label: 'Side', allowedCategoryIds: [cat_sides._id], minChoices: 0, maxChoices: 1, required: false },
+      ],
+    },
+    {
+      tenant: tenantId, name: 'Kids Meal Deal', bundlePricePence: 490,
+      description: 'Small meal deal perfect for kids.',
+      backgroundColor: '#10b981', textColor: '#ffffff', isActive: true,
+      components: [
+        { label: 'Main', allowedCategoryIds: [cat_burgers._id, cat_sfc_and_value_boxes._id], minChoices: 1, maxChoices: 1, required: true },
+      ],
+    },
+    {
+      tenant: tenantId, name: 'Mixed Box', bundlePricePence: 850,
+      description: 'Mixed selection box.',
+      backgroundColor: '#10b981', textColor: '#ffffff', isActive: true,
+      components: [
+        { label: 'Main', allowedCategoryIds: [cat_sfc_and_value_boxes._id, cat_kebabs._id], minChoices: 1, maxChoices: 1, required: true },
+      ],
+    },
+    {
+      tenant: tenantId, name: 'Chicken Tikka Meal Deal', bundlePricePence: 900,
+      description: 'Chicken tikka meal with sides.',
+      backgroundColor: '#10b981', textColor: '#ffffff', isActive: true,
+      components: [
+        { label: 'Main', allowedCategoryIds: [cat_kebabs._id], minChoices: 1, maxChoices: 1, required: true },
+        { label: 'Side', allowedCategoryIds: [cat_sides._id], minChoices: 0, maxChoices: 1, required: false },
+      ],
+    },
+    {
+      tenant: tenantId, name: 'Curry Deal', bundlePricePence: 1890,
+      description: 'Curry offers deal — curry with sides and drink.',
+      backgroundColor: '#ef4444', textColor: '#ffffff', isActive: true,
+      components: [
+        { label: 'Curry', allowedCategoryIds: [], minChoices: 1, maxChoices: 1, required: true },
+        { label: 'Side', allowedCategoryIds: [cat_sides._id], minChoices: 0, maxChoices: 1, required: false },
+      ],
+    },
+  ]);
+
   // --- VARIATIONS ---
   await Variation.create([
     { tenant: tenantId, menuItem: item_pizza_burger._id, name: 'Single Patty Build', priceDeltaPence: 0, isDefault: true, sku: 'BG-BUR-001-SGL', sortOrder: 0 },
