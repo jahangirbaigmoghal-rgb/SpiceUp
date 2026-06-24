@@ -4,6 +4,12 @@
   "private": true,
   "type": "module",
   "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./app": "./src/app.js",
+    "./db": "./src/config/db.js",
+    "./seed": "./src/seed_spiceup.js"
+  },
   "scripts": {
     "build": "echo 'No build step — plain JS for Vercel serverless'",
     "dev": "nodemon --watch src --ext js,json --exec \"node src/index.js\" ",

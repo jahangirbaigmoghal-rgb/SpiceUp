@@ -1,8 +1,6 @@
-import { app } from '../server/src/app.js';
-import { connectDb } from '../server/src/config/db.js';
-import { seedIfEmpty, repairDefaultUserPins, ensureAdminExists } from '../server/src/seed_spiceup.js';
-// force vercel cache invalidate 1
-
+import { app } from '@spiceup/server/app';
+import { connectDb } from '@spiceup/server/db';
+import { seedIfEmpty, repairDefaultUserPins, ensureAdminExists } from '@spiceup/server/seed';
 
 let ready;
 
