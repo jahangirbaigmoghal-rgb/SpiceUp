@@ -8,6 +8,7 @@
     "dev": "nodemon --watch src --ext js,json --exec \"node src/index.js\" ",
     "start": "node src/index.js",
     "seed": "node src/seed_spiceup.js",
+    "migrate:bundles": "node src/migrate_add_bundles.js",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest"
   },
   "dependencies": {
