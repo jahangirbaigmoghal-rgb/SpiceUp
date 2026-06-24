@@ -5,6 +5,7 @@
   "type": "module",
   "main": "src/index.js",
   "scripts": {
+    "build": "echo 'No build step — plain JS for Vercel serverless'",
     "dev": "nodemon --watch src --ext js,json --exec \"node src/index.js\" ",
     "start": "node src/index.js",
     "seed": "node src/seed_spiceup.js",
