@@ -1143,7 +1143,14 @@ export default function App() {
                 ))
               ) : (
                 menuItems
-                  .filter(item => !selectedCategory || item.category === selectedCategory)
+                  .filter(item => {
+                    if (!selectedCategory) return true;
+                    // API returns `category` as a populated object; normalize to its _id.
+                    const catId = typeof item.category === 'string'
+                      ? item.category
+                      : (item.category as any)?._id;
+                    return catId === selectedCategory;
+                  })
                   .map((item) => (
                     <button
                       key={item._id}
@@ -1828,10 +1835,13 @@ export default function App() {
                   const selections = bundleSelections[activeSlot.label] || [];
                   const reachedMax = selections.length >= activeSlot.maxChoices;
 
-                  // Find items belonging to category
-                  const allowedItems = menuItems.filter(item => 
-                    activeSlot.allowedCategoryIds.some((cid: any) => String(cid) === String(item.category))
-                  );
+                  // Find items belonging to category (normalize populated object → _id)
+                  const allowedItems = menuItems.filter(item => {
+                    const catId = typeof item.category === 'string'
+                      ? item.category
+                      : (item.category as any)?._id;
+                    return activeSlot.allowedCategoryIds.some((cid: any) => String(cid) === String(catId));
+                  });
 
                   return (
                     <div className="space-y-4">
