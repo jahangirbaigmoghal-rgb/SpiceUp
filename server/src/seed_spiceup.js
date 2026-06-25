@@ -14065,8 +14065,12 @@ export async function repairDefaultUserPins() {
   try {
     const tenant = await Tenant.findById(TARGET_TENANT_ID).select('_id').lean()
       ?? (await Tenant.findOne().select('_id').lean());
-    if (!tenant) return;
+    if (!tenant) {
+      console.warn('⚠️  repairDefaultUserPins: no tenant found — skipping PIN repair');
+      return;
+    }
     const tenantId = tenant._id;
+    console.log(`🔧 Repairing default user PINs for tenant ${tenantId}...`);
 
     const defaultUsers = [
       { username: 'admin',   pin: '1111' },
@@ -14076,17 +14080,26 @@ export async function repairDefaultUserPins() {
       { username: 'driver',  pin: '5555' },
     ];
 
+    let repaired = 0;
     for (const { username, pin } of defaultUsers) {
       const user = await User.findOne({ tenant: tenantId, username });
-      if (!user) continue;
+      if (!user) {
+        console.log(`   ⏭️  ${username}: user not found — will be created by ensureAdminExists`);
+        continue;
+      }
 
       // Only repair when the stored PIN genuinely fails to verify.
       const pinWorks = user.pin && (await user.verifyPin(pin));
       if (!pinWorks) {
+        console.log(`   🔧 ${username}: PIN verification failed — re-hashing...`);
         user.pin = await User.hashPin(pin);
         await user.save();
+        repaired++;
+      } else {
+        console.log(`   ✅ ${username}: PIN OK`);
       }
     }
+    console.log(`🔧 PIN repair complete — ${repaired} PIN(s) fixed`);
   } catch (err) {
     console.error('Error repairing default user PINs:', err);
   }

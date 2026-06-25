@@ -93,3 +93,48 @@ app.use('/api/voice', voiceRoutes); // Internal — used by voice-agent service
 // ─── Error Handling ──────────────────────────────────────────────────────────
 app.use(notFound);
 app.use(errorHandler);
+
+// ─── Vercel Serverless Adapter ───────────────────────────────────────────────
+// When imported by Vercel (either via api/index.js or auto-discovery), provide a
+// ready-to-run default export that handles DB connection + seeding lazily on the
+// first request. This makes app.js safe to use as a serverless entry point on
+// its own, regardless of how Vercel discovers it.
+
+let _ready;
+let _initError;
+
+async function _ensureReady() {
+  if (!_ready && !_initError) {
+    try {
+      _ready = (async () => {
+        const { connectDb } = await import('./config/db.js');
+        await connectDb();
+        const { seedIfEmpty, repairDefaultUserPins, ensureAdminExists } = await import('./seed_spiceup.js');
+        await seedIfEmpty();
+        await repairDefaultUserPins();
+        await ensureAdminExists();
+        console.log('✅ Serverless init complete — DB connected, seed done');
+      })();
+      await _ready;
+    } catch (err) {
+      _initError = err;
+      console.error('❌ Serverless init failed:', err);
+    }
+  }
+  if (_initError) throw _initError;
+}
+
+export default async function handler(req, res) {
+  try {
+    await _ensureReady();
+    return app(req, res);
+  } catch (err) {
+    console.error('❌ Handler error:', err);
+    return res.status(500).json({
+      error: true,
+      message: err.message,
+      stack: process.env.NODE_ENV === 'production' ? undefined : err.stack,
+    });
+  }
+}
+
