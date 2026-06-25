@@ -31,7 +31,9 @@ export async function authenticate(req, res, next) {
       return res.status(401).json({ error: 'Authentication required' });
     }
 
-    const decoded = jwt.verify(token, env.jwtSecret);
+    // SECURITY (Phase A): pin the accepted algorithm(s) so a token can never
+    // choose its own verification method (alg-confusion / `none`-algorithm attack).
+    const decoded = jwt.verify(token, env.jwtSecret, { algorithms: ['HS256'] });
     const user = await User.findById(decoded.userId).select('-passwordHash -pin').lean();
 
     if (!user || !user.isActive) {

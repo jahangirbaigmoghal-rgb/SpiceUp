@@ -1,4 +1,19 @@
 import rateLimit from 'express-rate-limit';
+import { RedisStore } from 'rate-limit-redis';
+import { getRedis } from '../config/redis.js';
+
+/**
+ * Build a shared Redis store config for rate limiters.
+ * Returns undefined when Redis is not available (falls back to in-memory).
+ */
+function redisStore() {
+  const client = getRedis();
+  return client
+    ? new RedisStore({
+        sendCommand: (...args) => client.sendCommand(args),
+      })
+    : undefined; // express-rate-limit falls back to MemoryStore
+}
 
 /** Remove dangerous keys from request body (XSS/injection mitigation). */
 export function sanitizeBody(req, _res, next) {
@@ -26,6 +41,7 @@ export const apiLimiter = rateLimit({
   max: 500,
   standardHeaders: true,
   legacyHeaders: false,
+  store: redisStore(),
   message: { error: 'Too many requests — please try again later' },
 });
 
@@ -35,5 +51,6 @@ export const authLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
+  store: redisStore(),
   message: { error: 'Too many login attempts — please try again in 15 minutes' },
 });

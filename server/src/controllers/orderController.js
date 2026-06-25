@@ -23,6 +23,45 @@ import { env } from '../config/env.js';
 
 const stripe = env.stripeSecretKey ? stripePackage(env.stripeSecretKey) : null;
 
+/**
+ * SECURITY (Phase A.4): return a customer-safe JSON object from a Mongoose order
+ * document.  Strips all internal identifiers (staff, driver, terminal, voice SID,
+ * Stripe payment/link IDs, refund history, and status-history actors).
+ */
+function sanitizeOrderForCustomer(doc) {
+  const o = doc.toObject ? doc.toObject() : doc;
+  const safe = {
+    _id: o._id,
+    reference: o.reference,
+    channel: o.channel,
+    orderType: o.orderType,
+    status: o.status,
+    customer: o.customer ? {
+      name: o.customer.name,
+      phone: o.customer.phone,
+      email: o.customer.email,
+      ...(o.customer.address ? { address: { line1: o.customer.address.line1, line2: o.customer.address.line2, city: o.customer.address.city, postcode: o.customer.address.postcode } } : {}),
+    } : undefined,
+    tableNumber: o.tableNumber,
+    scheduledFor: o.scheduledFor,
+    estimatedReadyAt: o.estimatedReadyAt,
+    lines: o.lines,
+    payments: o.payments?.map(p => ({ method: p.method, amountPence: p.amountPence, status: p.status, paidAt: p.paidAt, refundedPence: p.refundedPence })),
+    promoCode: o.promoCode,
+    discountPence: o.discountPence,
+    discountReason: o.discountReason,
+    deliveryChargePence: o.deliveryChargePence,
+    subtotalPence: o.subtotalPence,
+    vatBreakdown: o.vatBreakdown,
+    vatPence: o.vatPence,
+    totalPence: o.totalPence,
+    notes: o.notes,
+    createdAt: o.createdAt,
+    updatedAt: o.updatedAt,
+  };
+  return safe;
+}
+
 // FSM allowed transitions definition
 const ALLOWED_TRANSITIONS = {
   placed: ['confirmed', 'cancelled'],
@@ -610,7 +649,7 @@ export async function createOrder(req, res, next) {
         const existing = await Order.findOne({ _id: existingOrderId, tenant: req.tenantId });
         if (existing) {
           console.log(`🔄 Idempotency hit (Redis) — returning existing order: ${existing.reference}`);
-          return res.json({ order: existing, duplicate: true });
+          return res.json({ order: sanitizeOrderForCustomer(existing), duplicate: true });
         }
       }
     }
@@ -915,7 +954,7 @@ export async function createOrder(req, res, next) {
 
     emitNewOrder(req.tenantId, order);
 
-    res.status(201).json({ order, kitchenTicket: ticketText });
+    res.status(201).json({ order: sanitizeOrderForCustomer(order), kitchenTicket: ticketText });
   } catch (err) {
     // E11000 on idempotencyKey unique index — a duplicate slipped through the
     // Redis check (race window or Redis unavailable). Return the existing order.
@@ -923,7 +962,7 @@ export async function createOrder(req, res, next) {
       const existing = await Order.findOne({ tenant: req.tenantId, idempotencyKey });
       if (existing) {
         await setIdempotency(idempotencyKey, existing._id.toString(), 86400);
-        return res.json({ order: existing, duplicate: true });
+        return res.json({ order: sanitizeOrderForCustomer(existing), duplicate: true });
       }
     }
     if (err instanceof Error && !err.status && !err.statusCode) {
@@ -1087,10 +1126,34 @@ export async function refundOrder(req, res, next) {
 
 export async function getOrderByRef(req, res, next) {
   try {
-    const order = await Order.findOne({
-      tenant: req.tenantId,
-      reference: req.params.reference.toUpperCase().trim(),
-    });
+    // SECURITY (Phase A.4): public endpoint — never return internal fields or
+    // payment-provider IDs.  Projection strips staff, driver, terminal, Stripe
+    // internals, voice-call SID, refund history, and status-history actors.
+    const order = await Order.findOne(
+      { tenant: req.tenantId, reference: req.params.reference.toUpperCase().trim() },
+      {
+        _id: 1, reference: 1, channel: 1, orderType: 1, status: 1,
+        customer: {
+          name: 1, phone: 1, email: 1,
+          address: { line1: 1, line2: 1, city: 1, postcode: 1 },
+        },
+        tableNumber: 1, scheduledFor: 1, estimatedReadyAt: 1,
+        lines: 1,
+        payments: {
+          method: 1, amountPence: 1, status: 1,
+          paidAt: 1, refundedPence: 1,
+        },
+        promoCode: 1, discountPence: 1, discountReason: 1,
+        deliveryChargePence: 1, subtotalPence: 1, vatBreakdown: 1,
+        vatPence: 1, totalPence: 1, notes: 1,
+        createdAt: 1, updatedAt: 1,
+        // Explicitly EXCLUDED (internal only):
+        //   tenant, idempotencyKey, customerId, deliveryZoneId,
+        //   assignedDriver, staffId, terminalId, voiceCallSid,
+        //   payments[].stripePaymentIntentId, payments[].stripePaymentLinkId,
+        //   refundHistory[], statusHistory[]
+      },
+    ).lean();
 
     if (!order) {
       return res.status(404).json({ error: 'Order reference not found' });

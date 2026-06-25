@@ -14083,10 +14083,8 @@ export async function repairDefaultUserPins() {
       // Only repair when the stored PIN genuinely fails to verify.
       const pinWorks = user.pin && (await user.verifyPin(pin));
       if (!pinWorks) {
-        console.log(`🔧 Repairing corrupted PIN for ${username}...`);
         user.pin = await User.hashPin(pin);
         await user.save();
-        console.log(`✅ PIN for ${username} repaired.`);
       }
     }
   } catch (err) {
@@ -14140,7 +14138,7 @@ export async function ensureAdminExists() {
 
       // Only seed a PIN if the user has none at all.
       if (!user.pin || (typeof user.pin === 'string' && user.pin.trim() === '')) {
-        console.log(`🔑 ${username} has no PIN — setting default PIN...`);
+        // Pin set silently — no log output to avoid leaking user credential state.
         user.pin = await User.hashPin(defaultPin);
         needsUpdate = true;
       }

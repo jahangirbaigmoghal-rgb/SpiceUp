@@ -56,7 +56,8 @@ export function initSocket(httpServer) {
     }
 
     try {
-      const decoded = jwt.verify(token, env.jwtSecret);
+      // SECURITY (Phase A): pin the algorithm — never let the token header decide.
+      const decoded = jwt.verify(token, env.jwtSecret, { algorithms: ['HS256'] });
       socket.data.userId = decoded.userId || decoded.sub || decoded.id;
       socket.data.tenantId = decoded.tenantId;
       socket.data.role = decoded.role;

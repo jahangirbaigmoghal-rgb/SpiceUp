@@ -1,5 +1,4 @@
 import mongoose from 'mongoose';
-import { MongoMemoryServer } from 'mongodb-memory-server';
 import { env } from './env.js';
 
 let memoryServer;
@@ -13,6 +12,8 @@ export async function connectDb() {
 }
 
 async function getMemoryUri() {
+  // Lazy import — only used in local dev, never in Vercel serverless
+  const { MongoMemoryServer } = await import('mongodb-memory-server');
   memoryServer = await MongoMemoryServer.create({ instance: { dbName: 'spiceup_dev' } });
   return memoryServer.getUri();
 }

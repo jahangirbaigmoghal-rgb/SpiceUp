@@ -724,11 +724,15 @@ export async function seed() {
 
   console.log('\n🎉 DEMO DATABASE SEED COMPLETED SUCCESSFULLY!');
   console.log('----------------------------------------------------');
-  console.log('Default Admin Username: admin / Password: Admin123! / PIN: 1111');
-  console.log('Default Manager Username: manager / Password: Manager123! / PIN: 2222');
-  console.log('Default Cashier Username: cashier / Password: Cashier123! / PIN: 3333');
-  console.log('Default Kitchen Username: kitchen / Password: Kitchen123! / PIN: 4444');
-  console.log('Default Driver Username: driver / Password: Driver123! / PIN: 5555');
+  // SECURITY (Phase A): only echo default credentials in non-production, and never
+  // print literal passwords/PINs — they may be captured in CI or deploy logs.
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('Default users created: admin, manager, cashier, kitchen, driver.');
+    console.log('Default credentials are documented in the project README/docs — change them immediately in production.');
+    console.log('Default PINs are documented in docs/ — never commit real PINs to logs.');
+  } else {
+    console.log('Default demo users created. Rotate all default credentials before going live.');
+  }
   console.log('----------------------------------------------------');
   console.log(`Please copy this Tenant ID to set your DEFAULT_TENANT_ID in .env:\n${tenantId}\n`);
 }
@@ -792,10 +796,8 @@ export async function repairDefaultUserPins() {
       const pinWorks = await user.verifyPin(pin);
       if (!pinWorks) {
         // PIN is corrupted — reset it to the correct default
-        console.log(`🔧 Repairing corrupted PIN for ${username}...`);
         user.pin = await User.hashPin(pin);
         await user.save();
-        console.log(`✅ PIN for ${username} repaired.`);
       }
     }
   } catch (err) {
@@ -846,7 +848,7 @@ export async function ensureAdminExists() {
       // Only set a PIN if the user has none at all (null/undefined/empty string).
       // Never reset an existing PIN — that would wipe any PIN the user has set.
       if (!user.pin || (typeof user.pin === 'string' && user.pin.trim() === '')) {
-        console.log(`🔑 ${username} has no PIN — setting default PIN...`);
+        // Pin set silently — no log output to avoid leaking user credential state.
         user.pin = await User.hashPin(defaultPin);
         needsUpdate = true;
       }

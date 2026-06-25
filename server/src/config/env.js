@@ -70,8 +70,8 @@ export const env = {
   // Google Maps
   googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY ?? '',
 
-  // Voice Agent — service-to-service bearer; must be a real secret in production.
-  voiceAgentApiKey: secret('VOICE_AGENT_API_KEY', 'dev_voice_agent_key'),
+  // Voice Agent — service-to-service bearer; optional — only needed for voice agent feature.
+  voiceAgentApiKey: process.env.VOICE_AGENT_API_KEY ?? '',
   voiceAgentUrl: process.env.VOICE_AGENT_URL ?? 'http://localhost:8000',
 
   // Printer

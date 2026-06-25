@@ -131,19 +131,16 @@ export async function verifyPin(req, res, next) {
     if (!pin) {
       return res.status(400).json({ error: 'PIN is required' });
     }
-    console.log(`[verifyPin] req.tenantId = ${req.tenantId}, pin = ${pin}`);
 
     const users = await User.find({
       tenant: req.tenantId,
       isActive: true,
       role: { $in: ['manager', 'admin', 'super_admin'] },
     });
-    console.log(`[verifyPin] Found ${users.length} active managers/admins: ${users.map(u => u.username).join(', ')}`);
 
     let verifiedUser = null;
     for (const u of users) {
       const isMatch = u.pin && (await u.verifyPin(pin));
-      console.log(`[verifyPin] Checking manager ${u.username}: matches = ${isMatch}`);
       if (isMatch) {
         verifiedUser = u;
         break;
@@ -151,7 +148,7 @@ export async function verifyPin(req, res, next) {
     }
 
     if (!verifiedUser) {
-      console.log(`[verifyPin] Verification failed for manager PIN: ${pin}`);
+      // SECURITY (Phase A): never log the attempted PIN value or which users were checked.
       return res.status(403).json({ error: 'Verification failed — invalid manager PIN' });
     }
 
